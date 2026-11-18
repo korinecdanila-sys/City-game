@@ -2,175 +2,484 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Восстановление города</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Последний шанс</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#10181b;color:#f4f7f5;font-family:Arial,sans-serif}
-.app{max-width:680px;margin:auto;min-height:100vh;padding-bottom:85px;background:linear-gradient(#1a282c,#10181b)}
-header{padding:18px 15px 12px;background:#111b1e;border-bottom:1px solid #304044}
-h1{font-size:21px;margin:0 0 4px}.sub{font-size:11px;color:#9eacab}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:15px}
-.stat{padding:9px 3px;text-align:center;background:#1c2a2e;border:1px solid #334348;border-radius:10px}
-.stat b{display:block;font-size:12px}.stat span{font-size:9px;color:#99a7a5}
-main{padding:14px}.title{display:flex;justify-content:space-between;margin-bottom:9px}.title h2{font-size:16px;margin:0}.online{font-size:10px;color:#7dce91}
-.map{height:350px;position:relative;overflow:hidden;border:1px solid #66756e;border-radius:16px;background:#758975}
-.map svg{width:100%;height:100%}.building{cursor:pointer}.label{position:absolute;font-size:10px;text-shadow:0 1px 3px #000}.north{right:14px;top:14px}.center{left:38%;top:50%}
-.tooltip{display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);padding:9px 15px;text-align:center;background:#152124ed;border:1px solid #687974;border-radius:10px;min-width:180px;font-size:12px}.tooltip.show{display:block}.tooltip span{display:block;color:#aab8b5;font-size:10px;margin-top:3px}
-section{margin-top:19px}.card,.mission{background:#1b2a2e;border:1px solid #34474a;border-radius:13px;padding:13px}.mission{display:flex;gap:11px;align-items:center}.mission p,.card p{font-size:11px;color:#aab8b5;line-height:1.4}.mission p{margin:5px 0 9px}.progress{height:5px;background:#10191b;border-radius:5px}.progress i{display:block;width:35%;height:100%;background:#79c789;border-radius:5px}
-button{border:0;border-radius:9px;padding:10px 12px;background:#d5a85a;color:#191713;font-weight:bold;cursor:pointer}.cards{display:grid;grid-template-columns:1fr 1fr;gap:9px}.card{cursor:pointer}.card b{font-size:12px}.card p{min-height:30px}.tag{color:#7dce91;font-size:10px}
-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(680px,100%);display:grid;grid-template-columns:repeat(4,1fr);padding:9px 8px;background:#172326f2;border-top:1px solid #354649}nav button{background:none;color:#9aa8a6;padding:4px;font-size:10px}nav strong{display:block;font-size:19px;color:#d5a85a}
-.overlay{position:fixed;inset:0;z-index:5;display:flex;align-items:flex-end;background:#000b}.intro,.modal{width:min(680px,100%);margin:auto auto 0;padding:25px 19px;background:#19282c;border-radius:20px 20px 0 0;border-top:1px solid #718079}.intro h2,.modal h3{margin:9px 0;font-size:24px}.intro p,.modal p{font-size:13px;line-height:1.5;color:#c0ceca}.intro input{width:100%;padding:13px;background:#10191c;color:white;border:1px solid #586866;border-radius:9px;font-size:15px}.actions{display:flex;gap:8px;margin-top:14px}.actions button{flex:1}.back{background:#35474a;color:white}.hidden{display:none!important}
+:root{--bg:#101719;--panel:#1d2a2d;--line:#405255;--gold:#d4a45b;--green:#86c68c;--muted:#a9b4af}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#f4f1e8;font-family:Arial,sans-serif}
+.hidden{display:none!important}
+.app{max-width:700px;margin:auto;min-height:100vh;background:linear-gradient(#1b292b,#101719);padding-bottom:82px}
+.top{padding:17px 15px 12px;background:#111b1d;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+.topline{display:flex;justify-content:space-between;align-items:center}
+.top h1{font:700 21px Georgia;margin:0}
+.muted{color:var(--muted);font-size:11px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:13px}
+.stat{padding:8px 2px;text-align:center;border:1px solid #35474a;border-radius:9px;background:#1c2b2e;font-size:12px}
+.stat small{display:block;color:var(--muted);font-size:9px;margin-top:3px}
+.content{padding:14px}
+.heading{display:flex;justify-content:space-between;align-items:center;margin:9px 3px}
+.heading h2{font-size:16px;margin:0}
+.heading span{font-size:10px;color:var(--green)}
+.map{height:300px;background:#708775;border:1px solid #718079;border-radius:14px;position:relative;overflow:hidden}
+.map svg{width:100%;height:100%}
+.poi{cursor:pointer}
+.poi:hover{filter:brightness(1.2)}
+.map label{position:absolute;font-size:10px;text-shadow:0 1px 3px #000}
+.north{top:10px;right:12px}.center{top:52%;left:40%}
+.hint{display:none;position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:#132124ed;border:1px solid #77877e;border-radius:9px;padding:9px 13px;text-align:center;min-width:180px;font-size:12px}
+.hint.show{display:block}
+.hint small{display:block;color:#aebbb4;margin-top:3px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px;margin-top:10px}
+.panel h3{font-size:14px;margin:0 0 6px}
+.panel p{font-size:12px;color:#bdc7c1;line-height:1.45;margin:6px 0 10px}
+.progress{height:6px;background:#101719;border-radius:5px;overflow:hidden}
+.progress i{display:block;width:0;height:100%;background:var(--green);transition:.3s}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.btn{border:0;border-radius:8px;padding:11px;background:var(--gold);color:#171713;font-weight:bold;cursor:pointer}
+.btn.alt{background:#34474a;color:#fff}
+.choice{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.choice button{text-align:left;min-height:75px;background:#26383a;color:#fff;border:1px solid #4c615d;border-radius:9px;padding:10px;cursor:pointer}
+.choice button b{display:block;color:var(--gold);margin-bottom:5px}
+.choice button small{color:#bfcbc4;line-height:1.3}
+.event{border-color:#725c3d;background:#2d2a24}
+.residents{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.resident{background:#253538;border:1px solid #405457;border-radius:9px;padding:9px;text-align:center;font-size:11px}
+.resident strong{display:block;font-size:19px;color:var(--green);margin-bottom:3px}
+.bottom{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(700px,100%);display:grid;grid-template-columns:repeat(4,1fr);padding:8px;background:#172426f5;border-top:1px solid #405154;z-index:3}
+.bottom button{border:0;background:none;color:#a9b3af;font-size:10px}
+.bottom strong{display:block;color:var(--gold);font-size:19px;margin-bottom:3px}
+.overlay{position:fixed;inset:0;background:#000b;display:flex;align-items:flex-end;z-index:5}
+.sheet{width:min(700px,100%);margin:auto auto 0;background:#1b2a2c;border-radius:18px 18px 0 0;border-top:1px solid #72817a;padding:24px 18px 28px}
+.sheet h2{font:700 25px Georgia;margin:0 0 11px}
+.sheet p{font:15px Georgia;color:#d2d6cd;line-height:1.55}
+.story{min-height:100vh;display:flex;align-items:flex-end;background:linear-gradient(#07101355,#071013e8),radial-gradient(circle at 70% 20%,#ac795155,transparent 35%),#26392f}
+.story .sheet{background:#152326f5}
+.story h1{font:700 30px Georgia;line-height:1.08}
+.quote{border-left:3px solid var(--gold);padding:12px 14px;background:#ffffff08;font:italic 15px Georgia;color:#e7e0d0}
+.story .btn{width:100%;margin-top:12px}
+input{width:100%;padding:13px;border:1px solid #5c6e68;border-radius:8px;background:#101719;color:#fff;font-size:15px}
 </style>
 </head>
+
 <body>
 
-<div class="overlay" id="intro">
-  <div class="intro">
-    <div id="story">
-      <small style="color:#d5a85a">ГОД ДО РАССВЕТА · ПРОЛОГ</small>
-      <h2>Пари, которое изменит город</h2>
-      <p>Загадочный человек предлагает вам пустой город и год, чтобы привести сюда 10 000 жителей.</p>
-      <p>Если проиграете — город снесут. Если победите — получите город, 10 миллионов долларов и приглашение в закрытый клуб мэров.</p>
-      <p>Ночью в одном из окон загорается свеча. Так вы знакомитесь с Анатолием — бывшим начальником котельной.</p>
-      <button onclick="showName()">Продолжить</button>
-    </div>
-
-    <div id="nameForm" class="hidden">
-      <h2>Назовите город</h2>
-      <p>Анатолий открывает старый журнал: «У города ещё есть шанс. Как мы его назовём?»</p>
-      <input id="cityInput" maxlength="25" placeholder="Например: Новая Надежда">
-      <div class="actions">
-        <button class="back" onclick="showStory()">Назад</button>
-        <button onclick="startGame()">Принять город</button>
-      </div>
-      <small style="color:#9aa8a6">Стартовый бюджет: $200 000 · жителей: 1</small>
-    </div>
-  </div>
+<div id="intro" class="story">
+  <div class="sheet" id="storySheet"></div>
 </div>
 
-<div class="app">
-<header>
-  <h1 id="cityName">Новая Надежда</h1>
-  <div class="sub">День 1 · Северный район</div>
+<div id="game" class="app hidden">
+<header class="top">
+  <div class="topline">
+    <div>
+      <h1 id="cityName">Город</h1>
+      <span class="muted">День <b id="day">1</b> · восстановление</span>
+    </div>
+    <span style="font-size:25px">🏙️</span>
+  </div>
+
   <div class="stats">
-    <div class="stat"><b>$200 000</b><span>БЮДЖЕТ</span></div>
-    <div class="stat"><b>1 / 10 000</b><span>ЖИТЕЛИ</span></div>
-    <div class="stat"><b>50%</b><span>СЧАСТЬЕ</span></div>
-    <div class="stat"><b>0 ⚡</b><span>ЭНЕРГИЯ</span></div>
+    <div class="stat" id="money">$200 000<small>БЮДЖЕТ</small></div>
+    <div class="stat" id="pop">1 / 10 000<small>ЖИТЕЛИ</small></div>
+    <div class="stat" id="happy">50%<small>СЧАСТЬЕ</small></div>
+    <div class="stat" id="energy">0 ⚡<small>ЭНЕРГИЯ</small></div>
   </div>
 </header>
 
-<main>
-  <div class="title"><h2>Карта города</h2><span class="online">● СВЯЗЬ ЕСТЬ</span></div>
+<main class="content">
 
-  <div class="map">
-    <svg viewBox="0 0 600 350">
-      <rect width="600" height="350" fill="#748a78"/>
-      <path d="M-20 255Q160 205 300 245T630 145" fill="none" stroke="#bdbb9f" stroke-width="45"/>
-      <path d="M-20 255Q160 205 300 245T630 145" fill="none" stroke="#53645c" stroke-width="3"/>
-      <path d="M180-20L220 370M405-20L350 370M-20 95L620 105M-20 300L620 275" stroke="#c4c1a4" stroke-width="24"/>
-      <path d="M180-20L220 370M405-20L350 370M-20 95L620 105M-20 300L620 275" stroke="#58675f" stroke-width="2"/>
-      <g fill="#405b49" opacity=".8"><circle cx="70" cy="45" r="28"/><circle cx="120" cy="55" r="23"/><circle cx="530" cy="55" r="37"/><circle cx="70" cy="320" r="28"/><circle cx="550" cy="310" r="30"/></g>
+<div class="heading">
+  <h2>Осмотр города</h2>
+  <span>КЛЮЧЕВЫЕ УЗЛЫ</span>
+</div>
 
-      <g class="building" onclick="building('Жилой квартал','Разбиты коммуникации · требуется ремонт')">
-        <rect x="75" y="125" width="105" height="65" fill="#a88d73" stroke="#e1c5a1" stroke-width="3"/>
-        <path d="M75 125l20-20h105l-20 20z" fill="#70594c"/>
-        <g fill="#d9bc7b"><rect x="90" y="140" width="13" height="15"/><rect x="118" y="140" width="13" height="15"/><rect x="146" y="140" width="13" height="15"/><rect x="90" y="166" width="13" height="15"/><rect x="118" y="166" width="13" height="15"/></g>
-      </g>
+<div class="map">
+<svg viewBox="0 0 600 300">
+<rect width="600" height="300" fill="#708775"/>
+<path d="M-20 210Q140 160 290 205T630 115" fill="none" stroke="#b9b79d" stroke-width="42"/>
+<path d="M-20 210Q140 160 290 205T630 115" fill="none" stroke="#53635b" stroke-width="3"/>
+<path d="M175-20L210 330M405-20L345 330M-20 80L620 90M-20 255L620 230" stroke="#c3bfa3" stroke-width="23"/>
+<path d="M175-20L210 330M405-20L345 330M-20 80L620 90M-20 255L620 230" stroke="#58665e" stroke-width="2"/>
 
-      <g class="building" onclick="building('Котельная','Старое оборудование · восстановление 0%')">
-        <rect x="245" y="140" width="100" height="60" fill="#7d8580" stroke="#d0d3c2" stroke-width="3"/>
-        <path d="M235 140l60-30 60 30z" fill="#515b57"/>
-        <path d="M320 140v-70" stroke="#4d5c59" stroke-width="10"/>
-        <path d="M313 75h18" stroke="#4d5c59" stroke-width="5"/>
-        <rect x="265" y="158" width="18" height="25" fill="#bdd0ba"/>
-        <rect x="294" y="158" width="18" height="25" fill="#bdd0ba"/>
-      </g>
+<g fill="#405b49">
+<circle cx="60" cy="35" r="24"/>
+<circle cx="112" cy="47" r="21"/>
+<circle cx="535" cy="45" r="31"/>
+<circle cx="68" cy="270" r="25"/>
+<circle cx="550" cy="260" r="28"/>
+</g>
 
-      <g class="building" onclick="building('Водонапорная башня','Подача воды отключена')">
-        <path d="M455 105l-22 105h45z" fill="#6f7771" stroke="#d0d3c2" stroke-width="3"/>
-        <rect x="430" y="85" width="52" height="35" rx="8" fill="#88938a" stroke="#d0d3c2" stroke-width="3"/>
-      </g>
-    </svg>
-    <span class="label north">Северный район</span>
-    <span class="label center">Центральная площадь</span>
-    <div class="tooltip" id="tooltip"><b></b><span></span></div>
-  </div>
+<g class="poi" onclick="poi('Жилой дом №1','100 квартир · состояние: аварийное')">
+<rect x="70" y="105" width="106" height="61" fill="#a58b74" stroke="#e0c19d" stroke-width="3"/>
+<path d="M70 105l20-19h106l-20 19z" fill="#70594d"/>
+<g fill="#d7b774">
+<rect x="86" y="120" width="13" height="14"/>
+<rect x="114" y="120" width="13" height="14"/>
+<rect x="142" y="120" width="13" height="14"/>
+<rect x="86" y="145" width="13" height="14"/>
+<rect x="114" y="145" width="13" height="14"/>
+</g>
+</g>
 
-  <section>
-    <div class="title"><h2>Первый шаг</h2><span class="online">ЗАДАЧА</span></div>
-    <div class="mission">
-      <div style="font-size:27px">🛠️</div>
-      <div style="flex:1">
-        <b>Запустить первый дом</b>
-        <p>Восстановите воду, электричество и отопление хотя бы в одном доме.</p>
-        <div class="progress"><i></i></div>
-      </div>
-      <button onclick="openModal('first')">Открыть</button>
-    </div>
-  </section>
+<g class="poi" onclick="poi('Котельная','Главный узел · нужен запуск отопления')">
+<rect x="248" y="125" width="105" height="58" fill="#7c8580" stroke="#d1d6c5" stroke-width="3"/>
+<path d="M237 125l64-31 64 31z" fill="#505a56"/>
+<path d="M324 125V50" stroke="#4d5a57" stroke-width="10"/>
+</g>
 
-  <section>
-    <div class="title"><h2>Городские объекты</h2></div>
-    <div class="cards">
-      <div class="card" onclick="openModal('people')"><div style="font-size:25px">👥</div><b>130 жителей</b><p>Подсказка Анатолия откроется после первого дома.</p><span class="tag">БУДУЩИЙ БУСТ</span></div>
-      <div class="card" onclick="openModal('factory')"><div style="font-size:25px">🏭</div><b>Старый завод</b><p>Здесь можно создать рабочие места.</p><span class="tag">ЗАКРЫТО</span></div>
-    </div>
-  </section>
+<g class="poi" onclick="poi('Водонапорная башня','Насосы остановлены · вода отключена')">
+<path d="M455 90l-22 100h45z" fill="#727b74" stroke="#d1d6c5" stroke-width="3"/>
+<rect x="430" y="70" width="53" height="37" rx="9" fill="#89948b" stroke="#d1d6c5" stroke-width="3"/>
+</g>
+</svg>
+
+<label class="north">СЕВЕРНЫЙ РАЙОН</label>
+<label class="center">ЦЕНТРАЛЬНАЯ ПЛОЩАДЬ</label>
+<div id="hint" class="hint"><b></b><small></small></div>
+</div>
+
+<div class="heading">
+  <h2>Восстановление дома №1</h2>
+  <span id="phaseLabel">ОСМОТР</span>
+</div>
+
+<div class="panel">
+<h3 id="phaseTitle">С чего начать?</h3>
+<p id="phaseText">Анатолий предлагает выбрать первый узел. Решение изменит стоимость и состояние города.</p>
+<div class="progress"><i id="bar"></i></div>
+<div id="choices" class="choice" style="margin-top:10px"></div>
+<div id="stepActions" class="actions"></div>
+</div>
+
+<div id="event" class="panel event hidden"></div>
+
+<div class="heading">
+<h2>Население</h2>
+<span>ПОСЛЕ ЗАПУСКА ДОМА</span>
+</div>
+
+<div class="residents">
+<div class="resident"><strong id="workers">0</strong>рабочих</div>
+<div class="resident"><strong id="families">0</strong>семей</div>
+<div class="resident"><strong id="skills">0</strong>специалистов</div>
+</div>
+
 </main>
 
-<nav>
-  <button><strong>⌂</strong>Город</button>
-  <button onclick="openModal('build')"><strong>⌘</strong>Строить</button>
-  <button onclick="openModal('rating')"><strong>★</strong>Рейтинг</button>
-  <button onclick="openModal('profile')"><strong>◎</strong>Профиль</button>
+<nav class="bottom">
+<button><strong>⌂</strong>ГОРОД</button>
+<button onclick="openSheet('Строительство','После запуска первого дома откроются новые здания и производство.')"><strong>⌘</strong>СТРОИТЬ</button>
+<button onclick="openSheet('Рейтинг','Здесь будет рейтинг городов: население, счастье, бюджет и скорость восстановления.')"><strong>★</strong>РЕЙТИНГ</button>
+<button onclick="openSheet('Профиль','Заготовка под достижения, донаты и рекламные награды.')"><strong>◎</strong>ПРОФИЛЬ</button>
 </nav>
 </div>
 
-<div class="overlay hidden" id="modalOverlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
-    <h3 id="modalTitle"></h3>
-    <p id="modalText"></p>
-    <div class="actions"><button class="back" onclick="closeModal()">Назад</button><button onclick="closeModal()">Понятно</button></div>
-  </div>
+<div id="modal" class="overlay hidden" onclick="if(event.target===this)closeSheet()">
+<div class="sheet">
+<h2 id="modalTitle"></h2>
+<p id="modalText"></p>
+<button class="btn" onclick="closeSheet()">Понятно</button>
+</div>
 </div>
 
 <script>
 const tg=window.Telegram?.WebApp;
-tg?.ready();tg?.expand();
+tg?.ready();
+tg?.expand();
 
-function showName(){story.classList.add('hidden');nameForm.classList.remove('hidden')}
-function showStory(){nameForm.classList.add('hidden');story.classList.remove('hidden')}
+const $=id=>document.getElementById(id);
 
-function startGame(){
-  const name=document.getElementById('cityInput').value.trim()||'Новая Надежда';
-  localStorage.setItem('cityGameSave',JSON.stringify({city:name,day:1,budget:200000,population:1}));
-  document.getElementById('cityName').textContent=name;
-  document.getElementById('intro').classList.add('hidden');
+let state=JSON.parse(localStorage.getItem("cityGameSave")||"null");
+let introStep=0;
+
+const introScenes=[
+[
+"ГОД ДО РАССВЕТА",
+"Пари на один год",
+"Загадочный человек отдаёт вам пустой город. «Приведи сюда 10 000 жителей за год. Не справишься — город снесут. Справишься — получишь 10 миллионов долларов и сам город».",
+"Других шансов у вас нет.",
+"Въехать в город"
+],
+[
+"ПЕРВАЯ НОЧЬ",
+"Свеча в разбитом окне",
+"Сто домов, заброшенный завод и ржавая котельная. Ни электричества, ни воды. Ночью в одном окне загорается свеча.",
+"За дверью вас встречает Анатолий, 78 лет.",
+"Познакомиться"
+],
+[
+"АНАТОЛИЙ",
+"«Я знаю этот город»",
+"«Когда-то я отвечал за котельную. Остался один. Но каждый узел ещё можно вернуть к жизни».",
+"Утром он ведёт вас на осмотр.",
+"Осмотреть город"
+],
+[
+"ОСМОТР",
+"Первое решение мэра",
+"Дом №1 без воды, света и тепла. Башня без насосов. Котельная без огня. Бюджет ограничен 200 тысячами.",
+"«С чего начнём?»",
+"Назвать город"
+]
+];
+
+function renderIntro(){
+const s=introScenes[introStep];
+
+$("storySheet").innerHTML=`
+<div class="muted" style="color:var(--gold)">${s[0]}</div>
+<h1>${s[1]}</h1>
+<p>${s[2]}</p>
+<div class="quote">${s[3]}</div>
+${introStep===3?'<input id="cityInput" maxlength="24" placeholder="Название города">':''}
+<button class="btn" onclick="nextIntro()">${s[4]}</button>
+`;
 }
 
-const info={
- first:['Первый дом','Стоимость восстановления — $75 000. Нужно запустить электричество, воду и отопление. После этого Анатолий расскажет о 130 людях из соседней общаги.'],
- people:['Буст Анатолия','После запуска первого дома Анатолий расскажет: в соседнем городе закрывают общежитие. Там живут 130 человек, которым некуда идти.'],
- factory:['Старый завод','Завод заброшен двадцать лет. В будущем он даст рабочие места и доход городу.'],
- build:['Строительство','Выбирайте объекты на карте и восстанавливайте город постепенно.'],
- rating:['Рейтинг городов','Здесь появится рейтинг игроков по населению, счастью и эффективности восстановления.'],
- profile:['Профиль мэра','Здесь будут достижения, статистика, донатные бонусы и рекламные награды.']
+function nextIntro(){
+if(introStep<3){
+introStep++;
+renderIntro();
+return;
+}
+
+const city=$("cityInput").value.trim()||"Новая Надежда";
+
+state={
+city,
+day:1,
+money:200000,
+pop:1,
+happy:50,
+energy:0,
+phase:0,
+order:null,
+completed:false,
+recruited:false,
+workers:0,
+families:0,
+skills:0
 };
 
-function openModal(key){modalTitle.textContent=info[key][0];modalText.textContent=info[key][1];modalOverlay.classList.remove('hidden')}
-function closeModal(){modalOverlay.classList.add('hidden')}
-
-function building(title,text){
-  tooltip.querySelector('b').textContent=title;
-  tooltip.querySelector('span').textContent=text;
-  tooltip.classList.add('show');
-  setTimeout(()=>tooltip.classList.remove('show'),3000);
+save();
+openGame();
 }
 
-const save=JSON.parse(localStorage.getItem('cityGameSave')||'null');
-if(save){document.getElementById('cityName').textContent=save.city;document.getElementById('intro').classList.add('hidden')}
+function save(){
+localStorage.setItem("cityGameSave",JSON.stringify(state));
+}
+
+function openGame(){
+$("intro").classList.add("hidden");
+$("game").classList.remove("hidden");
+$("cityName").textContent=state.city;
+render();
+}
+
+const phases=[
+{
+label:"ВЫБОР",
+title:"С чего начать?",
+text:"Анатолий предупреждает: порядок работ повлияет на бюджет и настроение жителей.",
+cost:0
+},
+{
+label:"ЭТАП 1/4",
+title:"Водоснабжение",
+text:"Нужно заменить насос и прочистить подземную магистраль.",
+cost:22000
+},
+{
+label:"ЭТАП 2/4",
+title:"Электричество",
+text:"Старая подстанция выдержит только один жилой дом.",
+cost:28000
+},
+{
+label:"ЭТАП 3/4",
+title:"Котельная и отопление",
+text:"Анатолий показывает, какой клапан заклинило двадцать лет назад.",
+cost:33000
+},
+{
+label:"ЭТАП 4/4",
+title:"Канализация и безопасность",
+text:"Последняя проверка перед заселением: трубы и аварийный выход.",
+cost:17000
+}
+];
+
+function render(){
+if(state.completed&&!state.recruited){
+$("phaseLabel").textContent="ЗАВЕРШЕНО";
+$("phaseTitle").textContent="Дом №1 работает";
+$("phaseText").textContent="Вода, электричество, отопление и канализация запущены. Анатолий приготовил важную новость.";
+$("bar").style.width="100%";
+$("choices").innerHTML="";
+$("stepActions").innerHTML='<button class="btn" onclick="recruit()">Узнать новость Анатолия</button>';
+}else if(state.recruited){
+$("phaseLabel").textContent="НОВЫЙ ЭТАП";
+$("phaseTitle").textContent="Город получил первых жителей";
+$("phaseText").textContent="130 человек приехали в город. Теперь нужно дать им работу, питание и безопасное жильё.";
+$("bar").style.width="100%";
+$("choices").innerHTML="";
+$("stepActions").innerHTML='<button class="btn" onclick="openSheet(\'Следующий этап\',\'Откроется восстановление второго дома, магазина и завода.\')">Продолжить развитие</button>';
+}else{
+const p=phases[state.phase];
+
+$("phaseLabel").textContent=p.label;
+$("phaseTitle").textContent=p.title;
+$("phaseText").textContent=p.text;
+$("bar").style.width=(state.phase/4*100)+"%";
+$("choices").innerHTML="";
+$("stepActions").innerHTML="";
+
+if(state.phase===0){
+$("choices").innerHTML=`
+<button onclick="choose('water')">
+<b>Вода сначала</b>
+<small>Дешевле на $5 000, но город потеряет один день.</small>
+</button>
+<button onclick="choose('power')">
+<b>Электричество</b>
+<small>Быстрее ремонт, но потребуется больше денег.</small>
+</button>`;
+}else if(state.phase<4){
+$("stepActions").innerHTML=
+`<button class="btn" onclick="advance()">Выполнить этап · $${p.cost.toLocaleString("ru-RU")}</button>`;
+}else{
+$("stepActions").innerHTML=
+`<button class="btn" onclick="finishHouse()">Запустить дом</button>`;
+}
+}
+
+$("day").textContent=state.day;
+$("money").innerHTML="$"+state.money.toLocaleString("ru-RU")+"<small>БЮДЖЕТ</small>";
+$("pop").innerHTML=state.pop.toLocaleString("ru-RU")+" / 10 000<small>ЖИТЕЛИ</small>";
+$("happy").innerHTML=state.happy+"%<small>СЧАСТЬЕ</small>";
+$("energy").innerHTML=state.energy+" ⚡<small>ЭНЕРГИЯ</small>";
+$("workers").textContent=state.workers;
+$("families").textContent=state.families;
+$("skills").textContent=state.skills;
+}
+
+function choose(order){
+state.order=order;
+state.phase=1;
+
+if(order==="water"){
+state.money-=5000;
+state.happy-=2;
+toast("Начинаем с воды. День потерян, но бюджет сохранён.");
+}else{
+state.money-=12000;
+state.energy+=4;
+toast("Начинаем с электричества. Быстрее, но дороже.");
+}
+
+save();
+render();
+}
+
+function advance(){
+const p=phases[state.phase];
+
+if(state.money<p.cost){
+openSheet("Не хватает денег","Бюджет не позволяет выполнить этот этап. Нужно искать помощь, случайное событие или рекламную награду.");
+return;
+}
+
+state.money-=p.cost;
+state.day++;
+state.phase++;
+
+if(state.phase===3)state.energy+=8;
+if(state.phase===4)state.happy+=3;
+
+save();
+render();
+}
+
+function finishHouse(){
+state.completed=true;
+state.day++;
+state.happy+=10;
+state.energy+=12;
+save();
+render();
+toast("Первый дом полностью восстановлен");
+}
+
+function recruit(){
+$("event").classList.remove("hidden");
+
+$("event").innerHTML=`
+<h3>Анатолий раскрывает секрет</h3>
+<p>«В соседнем городе закрывают общежитие. Там 130 человек — сварщики, строители, повара и продавцы. У них нет дома. Дадим им шанс?»</p>
+<div class="actions">
+<button class="btn" onclick="acceptPeople()">Позвать их в город</button>
+<button class="btn alt" onclick="delayPeople()">Отложить решение</button>
+</div>`;
+
+$("stepActions").innerHTML="";
+}
+
+function acceptPeople(){
+state.recruited=true;
+state.pop=131;
+state.workers=47;
+state.families=38;
+state.skills=12;
+state.happy+=7;
+state.money+=18000;
+save();
+
+$("event").classList.add("hidden");
+render();
+toast("В город приехали 130 жителей");
+}
+
+function delayPeople(){
+state.happy-=5;
+state.day++;
+save();
+
+$("event").classList.add("hidden");
+render();
+toast("Люди нашли другое место. Возможность потеряна");
+}
+
+function poi(title,text){
+$("hint").querySelector("b").textContent=title;
+$("hint").querySelector("small").textContent=text;
+$("hint").classList.add("show");
+setTimeout(()=>$("hint").classList.remove("show"),3500);
+}
+
+function openSheet(title,text){
+$("modalTitle").textContent=title;
+$("modalText").textContent=text;
+$("modal").classList.remove("hidden");
+}
+
+function closeSheet(){
+$("modal").classList.add("hidden");
+}
+
+function toast(text){
+const e=$("hint");
+e.querySelector("b").textContent=text;
+e.querySelector("small").textContent="";
+e.classList.add("show");
+setTimeout(()=>e.classList.remove("show"),2500);
+}
+
+if(state){
+openGame();
+}else{
+renderIntro();
+}
 </script>
 </body>
 </html>
