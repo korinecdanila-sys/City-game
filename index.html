@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Восстановление Города</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #17212b; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Шапка с ресурсами */
+        .header { background: #242f3d; padding: 15px; display: flex; justify-content: space-between; font-size: 14px; border-bottom: 1px solid #101921; }
+        .resource { display: flex; flex-direction: column; align-items: center; }
+        .resource span { color: #7f91a4; font-size: 10px; margin-top: 2px; }
+        
+        /* Карта города */
+        .map-area { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #2b5278 0%, #17212b 100%); }
+        .city-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .city-status { color: #7f91a4; margin-bottom: 20px; }
+        .house-icon { font-size: 80px; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.5)); animation: float 3s ease-in-out infinite; }
+        
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+
+        /* Нижнее меню */
+        .bottom-menu { background: #242f3d; padding: 15px; display: flex; gap: 10px; border-top: 1px solid #101921; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 10px; background: #2b5278; color: white; font-weight: bold; font-size: 14px; transition: 0.2s; }
+        button:active { transform: scale(0.95); background: #3e72a8; }
+    </style>
+</head>
+<body>
+    <!-- Ресурсы -->
+    <div class="header">
+        <div class="resource">💰 <b>$200,000</b> <span>Баланс</span></div>
+        <div class="resource">👥 <b>0</b> <span>Жителей</span></div>
+        <div class="resource">😊 <b>50%</b> <span>Счастье</span></div>
+    </div>
+
+    <!-- Основная зона -->
+    <div class="map-area">
+        <div class="city-title" id="city-name">Название города</div>
+        <div class="city-status">🏚 Заброшенный город</div>
+        <div class="house-icon">🏚</div>
+    </div>
+
+    <!-- Кнопки -->
+    <div class="bottom-menu">
+        <button onclick="alert('Скоро тут будет восстановление домов!')">🏠 Дома</button>
+        <button onclick="alert('Скоро тут будет инфраструктура!')">⚡ Инфраструктура</button>
+        <button onclick="alert('Ищем жителей...')">👥 Жители</button>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram.WebApp;
+        tg.expand(); // Разворачиваем на весь экран
+        tg.ready();  // Сообщаем, что приложение готово
+
+        // Получаем имя пользователя (пока просто для теста)
+        let user = tg.initDataUnsafe?.user;
+        if (user) {
+            console.log("Игрок:", user.first_name);
+        }
+    </script>
+</body>
+</html>
