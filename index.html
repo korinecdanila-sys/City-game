@@ -1,66 +1,23 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Восстановление Города</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #17212b; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* Шапка с ресурсами */
-        .header { background: #242f3d; padding: 15px; display: flex; justify-content: space-between; font-size: 14px; border-bottom: 1px solid #101921; }
-        .resource { display: flex; flex-direction: column; align-items: center; }
-        .resource span { color: #7f91a4; font-size: 10px; margin-top: 2px; }
-        
-        /* Карта города */
-        .map-area { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #2b5278 0%, #17212b 100%); }
-        .city-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-        .city-status { color: #7f91a4; margin-bottom: 20px; }
-        .house-icon { font-size: 80px; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.5)); animation: float 3s ease-in-out infinite; }
-        
-        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
-
-        /* Нижнее меню */
-        .bottom-menu { background: #242f3d; padding: 15px; display: flex; gap: 10px; border-top: 1px solid #101921; }
-        button { flex: 1; padding: 15px; border: none; border-radius: 10px; background: #2b5278; color: white; font-weight: bold; font-size: 14px; transition: 0.2s; }
-        button:active { transform: scale(0.95); background: #3e72a8; }
-    </style>
-</head>
-<body>
-    <!-- Ресурсы -->
-    <div class="header">
-        <div class="resource">💰 <b>$200,000</b> <span>Баланс</span></div>
-        <div class="resource">👥 <b>0</b> <span>Жителей</span></div>
-        <div class="resource">😊 <b>50%</b> <span>Счастье</span></div>
-    </div>
-
-    <!-- Основная зона -->
-    <div class="map-area">
-        <div class="city-title" id="city-name">Название города</div>
-        <div class="city-status">🏚 Заброшенный город</div>
-        <div class="house-icon">🏚</div>
-    </div>
-
-    <!-- Кнопки -->
-    <div class="bottom-menu">
-        <button onclick="alert('Скоро тут будет восстановление домов!')">🏠 Дома</button>
-        <button onclick="alert('Скоро тут будет инфраструктура!')">⚡ Инфраструктура</button>
-        <button onclick="alert('Ищем жителей...')">👥 Жители</button>
-    </div>
-
-    <script>
-        // Инициализация Telegram WebApp
-        let tg = window.Telegram.WebApp;
-        tg.expand(); // Разворачиваем на весь экран
-        tg.ready();  // Сообщаем, что приложение готово
-
-        // Получаем имя пользователя (пока просто для теста)
-        let user = tg.initDataUnsafe?.user;
-        if (user) {
-            console.log("Игрок:", user.first_name);
-        }
-    </script>
-</body>
-</html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Новая Надежда — город</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#10171b;--panel:#1a2428;--panel2:#223136;--text:#f4f7f5;--muted:#9aa9a9;--accent:#d5a85a;--green:#78c78b;--blue:#70a9c7;--danger:#d77967}*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}body{min-height:100vh;overflow-x:hidden}.app{max-width:680px;margin:auto;min-height:100vh;background:linear-gradient(#182226,#11191c);padding-bottom:84px}.top{padding:calc(12px + env(safe-area-inset-top)) 16px 12px;background:rgba(16,23,27,.94);position:sticky;top:0;z-index:5;border-bottom:1px solid #2a393d}.brand{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}.brand h1{font-size:20px;margin:0;letter-spacing:-.4px}.brand small{color:var(--muted);display:block;font-size:11px;margin-top:2px}.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#36474a;border:1px solid #617477;font-size:18px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.stat{background:var(--panel);border:1px solid #2d3c40;border-radius:10px;padding:8px 5px;text-align:center}.stat b{font-size:13px;display:block}.stat span{display:block;color:var(--muted);font-size:9px;margin-top:3px}.map-wrap{padding:14px 12px 0}.map-head{display:flex;justify-content:space-between;align-items:end;padding:0 4px 10px}.map-head h2{font-size:16px;margin:0}.map-head span{font-size:11px;color:var(--green)}.city-map{height:370px;border:1px solid #4c5a58;border-radius:16px;overflow:hidden;position:relative;background:#6d806f;box-shadow:0 12px 35px #0006}.city-map:after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,#ffffff0b,transparent 38%,#00000017);pointer-events:none}.map-svg{width:100%;height:100%;display:block}.map-label{position:absolute;font-size:10px;color:#fff;letter-spacing:.5px;text-transform:uppercase;text-shadow:0 1px 3px #000;pointer-events:none}.label-north{top:15px;right:18px}.label-center{top:51%;left:39%}.building{cursor:pointer;transition:filter .2s}.building:hover{filter:brightness(1.18)}.map-tooltip{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:#172124ee;border:1px solid #71827d;border-radius:11px;padding:9px 12px;min-width:170px;text-align:center;opacity:0;pointer-events:none;transition:.2s}.map-tooltip.show{opacity:1}.map-tooltip b{font-size:12px}.map-tooltip span{display:block;color:var(--muted);font-size:10px;margin-top:2px}.section{padding:20px 16px 0}.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.section-title h2{font-size:16px;margin:0}.section-title a{color:var(--accent);font-size:11px}.mission{background:linear-gradient(100deg,#263c3c,#202d31);border:1px solid #466158;border-radius:13px;padding:13px;display:flex;gap:12px;align-items:center}.mission-icon{font-size:25px}.mission b{font-size:13px}.mission p{font-size:11px;color:var(--muted);margin:4px 0 8px}.progress{height:5px;background:#152124;border-radius:5px;overflow:hidden}.progress i{display:block;height:100%;width:62%;background:var(--green);border-radius:5px}.mission button,.modal button{border:0;background:var(--accent);color:#191713;font-weight:700;border-radius:8px;padding:9px 11px;font-size:11px;white-space:nowrap}.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.card{background:var(--panel);border:1px solid #2d3c40;border-radius:12px;padding:12px}.card .emoji{font-size:24px}.card b{display:block;font-size:12px;margin-top:8px}.card p{font-size:10px;color:var(--muted);margin:4px 0 10px;line-height:1.35}.tag{font-size:10px;color:var(--green)}.bottom{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(680px,100%);padding:9px 10px calc(9px + env(safe-area-inset-bottom));background:#172124f5;backdrop-filter:blur(14px);border-top:1px solid #304044;display:grid;grid-template-columns:repeat(4,1fr);z-index:10}.nav{border:0;background:none;color:#8e9b9b;font-size:10px;padding:3px}.nav strong{display:block;font-size:19px;margin-bottom:3px;font-weight:400}.nav.active{color:var(--accent)}.modal-bg{position:fixed;inset:0;background:#0009;display:none;align-items:end;z-index:20}.modal-bg.open{display:flex}.modal{width:min(680px,100%);margin:auto auto 0;background:#1b272b;border:1px solid #435457;border-radius:18px 18px 0 0;padding:20px 18px calc(22px + env(safe-area-inset-bottom));animation:up .25s ease}.modal h3{margin:0 0 7px}.modal p{font-size:12px;color:var(--muted);line-height:1.5}.modal-row{display:flex;gap:8px;margin-top:15px}.modal-row button{flex:1}.modal-row .secondary{background:#324347;color:#e8efed}@keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+</style></head>
+<body><main class="app">
+<header class="top"><div class="brand"><div><h1>Новая Надежда</h1><small>Район Северный · 12 день восстановления</small></div><div class="avatar">🏙️</div></div><div class="stats"><div class="stat"><b>₽ 200 000</b><span>БЮДЖЕТ</span></div><div class="stat"><b>0 / 1 200</b><span>ЖИТЕЛИ</span></div><div class="stat"><b>50%</b><span>СЧАСТЬЕ</span></div><div class="stat"><b>24 ⚡</b><span>ЭНЕРГИЯ</span></div></div></header>
+<section class="map-wrap"><div class="map-head"><h2>Карта города</h2><span>● Стабильная связь</span></div><div class="city-map"><svg class="map-svg" viewBox="0 0 600 370" aria-label="Карта города"><rect width="600" height="370" fill="#708676"/><path d="M-20 250 Q130 205 270 245 T630 155" fill="none" stroke="#b8b9a0" stroke-width="42"/><path d="M-20 250 Q130 205 270 245 T630 155" fill="none" stroke="#53625c" stroke-width="3"/><path d="M190 -20 L220 390 M405 -20 L350 390 M-20 92 L630 105 M-20 300 L630 275" stroke="#c2c0a5" stroke-width="25"/><path d="M190 -20 L220 390 M405 -20 L350 390 M-20 92 L630 105 M-20 300 L630 275" stroke="#53625c" stroke-width="2"/>
+<g fill="#3c514a" opacity=".72"><circle cx="65" cy="48" r="22"/><circle cx="110" cy="63" r="28"/><circle cx="520" cy="55" r="35"/><circle cx="565" cy="80" r="22"/><circle cx="70" cy="325" r="25"/><circle cx="555" cy="315" r="32"/></g>
+<g class="building" data-name="Жилой квартал" data-status="Требуется ремонт" onclick="selectBuilding(this)"><rect x="82" y="122" width="92" height="63" rx="3" fill="#9d8974" stroke="#e0c4a0" stroke-width="3"/><path d="M82 122l18-18h92l-18 18z" fill="#6f5b51"/><path d="M174 122v63l18-18v-63z" fill="#675650"/><g fill="#d5b574"><rect x="96" y="137" width="12" height="14"/><rect x="120" y="137" width="12" height="14"/><rect x="145" y="137" width="12" height="14"/><rect x="96" y="160" width="12" height="14"/><rect x="120" y="160" width="12" height="14"/></g></g>
+<g class="building" data-name="Городская ратуша" data-status="Доступно улучшение" onclick="selectBuilding(this)"><rect x="258" y="120" width="100" height="72" rx="3" fill="#bdab87" stroke="#e7d7ae" stroke-width="3"/><path d="M245 120l63-35 63 35z" fill="#756d59"/><path d="M265 120v-15h10v15m24 0v-15h10v15m24 0v-15h10v15" stroke="#e8d7a9" stroke-width="6"/><rect x="292" y="153" width="28" height="39" fill="#695f50"/><circle cx="306" cy="101" r="7" fill="#d5a85a"/></g>
+<g class="building" data-name="Старая электростанция" data-status="Восстановление: 35%" onclick="selectBuilding(this)"><rect x="424" y="177" width="86" height="55" fill="#7e8580" stroke="#c5ccc0" stroke-width="3"/><path d="M416 177l51-24 51 24z" fill="#4f5b59"/><rect x="440" y="191" width="12" height="22" fill="#b9cfbd"/><rect x="462" y="191" width="12" height="22" fill="#b9cfbd"/><path d="M486 170v-34" stroke="#4d5c5b" stroke-width="8"/><path d="M481 139h18" stroke="#4d5c5b" stroke-width="5"/></g>
+<g fill="#54785d"><circle cx="240" cy="302" r="19"/><circle cx="275" cy="315" r="24"/><circle cx="315" cy="305" r="20"/><circle cx="390" cy="65" r="25"/><circle cx="430" cy="62" r="18"/></g></svg><span class="map-label label-north">Северный район</span><span class="map-label label-center">Центральная площадь</span><div class="map-tooltip" id="tooltip"><b></b><span></span></div></div></section>
+<section class="section"><div class="section-title"><h2>Главная задача</h2><a onclick="openModal('mission')">Подробнее</a></div><div class="mission"><div class="mission-icon">🛠️</div><div style="flex:1"><b>Вернуть городу свет</b><p>Восстановите электростанцию и запустите первые районы.</p><div class="progress"><i></i></div></div><button onclick="openModal('power')">Открыть</button></div></section>
+<section class="section"><div class="section-title"><h2>Точки развития</h2><a>Все районы →</a></div><div class="cards"><div class="card" onclick="openModal('house')"><div class="emoji">🏘️</div><b>Жилой квартал</b><p>Постройте 3 дома для первых жителей.</p><span class="tag">+120 жителей</span></div><div class="card" onclick="openModal('park')"><div class="emoji">🌳</div><b>Центральный парк</b><p>Зелёная зона повысит настроение города.</p><span class="tag">+8% счастья</span></div></div></section>
+<nav class="bottom"><button class="nav active"><strong>⌂</strong>Город</button><button class="nav" onclick="openModal('build')"><strong>⌘</strong>Строить</button><button class="nav" onclick="openModal('tasks')"><strong>✓</strong>Задания</button><button class="nav" onclick="openModal('profile')"><strong>◎</strong>Профиль</button></nav></main>
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 id="modalTitle"></h3><p id="modalText"></p><div class="modal-row"><button class="secondary" onclick="closeModal()">Назад</button><button onclick="closeModal();toast('Задача добавлена')">Начать</button></div></div></div>
+<script>const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();function selectBuilding(el){const t=document.getElementById('tooltip');t.querySelector('b').textContent=el.dataset.name;t.querySelector('span').textContent=el.dataset.status;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}const data={mission:['Главная задача','Городу нужна энергия. Восстановите электростанцию, чтобы открыть строительство жилых домов и привлечь первых жителей.'],power:['Электростанция','Стоимость восстановления: ₽ 75 000. После запуска город получит +24 энергии и откроются новые здания.'],house:['Жилой квартал','Три дома ждут ремонта. Это даст городу первые 120 жителей и увеличит бюджет за счёт налогов.'],park:['Центральный парк','Благоустройство площади стоит ₽ 18 000 и повысит счастье жителей на 8%.'],build:['Строительство','Выберите район на карте, чтобы увидеть доступные проекты и стоимость восстановления.'],tasks:['Задания','Выполнено 4 из 12 задач. Следующая награда — ₽ 10 000.'],profile:['Профиль мэра','Ваш город развивается 12 дней. Рейтинг восстановления: новичок.']};function openModal(k){document.getElementById('modalTitle').textContent=data[k][0];document.getElementById('modalText').textContent=data[k][1];document.getElementById('modalBg').classList.add('open')}function closeModal(){document.getElementById('modalBg').classList.remove('open')}function toast(s){if(tg?.showPopup)tg.showPopup({title:'Готово',message:s,buttons:[{type:'ok'}]});else alert(s)}</script></body></html>
