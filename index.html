@@ -481,5 +481,136 @@ openGame();
 renderIntro();
 }
 </script>
+<!-- Вставьте этот блок перед закрывающим тегом </body> в текущий index.html -->
+<style>
+#coach{position:fixed;inset:0;z-index:20;pointer-events:none;background:rgba(0,0,0,.32)}
+#coachCard{position:absolute;left:14px;right:14px;bottom:92px;background:#fff;color:#182326;border-radius:16px;padding:16px;box-shadow:0 10px 35px #0008;pointer-events:auto;font-family:Arial}
+#coachCard b{display:block;font-size:16px;margin-bottom:6px}
+#coachCard p{margin:0 0 12px;font-size:13px;line-height:1.4;color:#52605d}
+#coachCard button{border:0;border-radius:9px;padding:11px 15px;background:#d4a45b;font-weight:bold}
+#coachStep{float:right;color:#718079;font-size:11px;padding-top:11px}
+.coach-pulse{position:relative;z-index:21!important;outline:3px solid #e7b861;box-shadow:0 0 0 7px #e7b86155,0 0 25px #e7b861!important;animation:coachPulse 1.2s infinite}
+@keyframes coachPulse{50%{filter:brightness(1.25)}}
+</style>
+
+<div id="coach" class="hidden">
+  <div id="coachCard">
+    <b id="coachTitle"></b>
+    <p id="coachText"></p>
+    <button id="coachButton">Понятно</button>
+    <span id="coachStep"></span>
+  </div>
+</div>
+
+<script>
+(function(){
+  let guide=Number(localStorage.getItem('cityGuideStep')||0);
+  const coach=document.getElementById('coach');
+  const title=document.getElementById('coachTitle');
+  const text=document.getElementById('coachText');
+  const button=document.getElementById('coachButton');
+  const counter=document.getElementById('coachStep');
+
+  const tips=[
+    [
+      'Добро пожаловать, мэр',
+      'Это ваш город. Сверху находятся ресурсы: бюджет, жители, счастье и энергия. Сначала осмотрим первый жилой дом.'
+    ],
+    [
+      'Осмотрите объект',
+      'Нажмите на здание жилого дома на карте. Появится его состояние и подсказка Анатолия.'
+    ],
+    [
+      'Выберите порядок ремонта',
+      'Теперь выберите, с чего начать: с воды или с электричества. У каждого решения есть последствия.'
+    ],
+    [
+      'Выполните этап',
+      'Нажмите золотую кнопку с ценой, чтобы выполнить текущий этап ремонта. После каждого шага появится новый.'
+    ],
+    [
+      'Используйте меню',
+      'Внизу находятся разделы города, строительства, рейтинга и профиля. Нажмите «Строить», чтобы посмотреть доступные проекты.'
+    ]
+  ];
+
+  function clear(){
+    document.querySelectorAll('.coach-pulse').forEach(x=>x.classList.remove('coach-pulse'));
+  }
+
+  function target(){
+    clear();
+    let el;
+    if(guide===1) el=document.querySelector('.poi');
+    if(guide===2) el=document.querySelector('#choices');
+    if(guide===3) el=document.querySelector('#stepActions .btn');
+    if(guide===4) el=document.querySelector('.bottom');
+    if(el) el.classList.add('coach-pulse');
+  }
+
+  function show(){
+    if(guide>=tips.length){
+      coach.classList.add('hidden');
+      clear();
+      return;
+    }
+
+    coach.classList.remove('hidden');
+    title.textContent=tips[guide][0];
+    text.textContent=tips[guide][1];
+    counter.textContent=(guide+1)+' / '+tips.length;
+    button.textContent=guide===0?'Начать обучение':'Понятно';
+    target();
+  }
+
+  function done(){
+    guide++;
+    localStorage.setItem('cityGuideStep',guide);
+    show();
+  }
+
+  button.onclick=done;
+
+  const oldPoi=window.poi;
+  if(oldPoi){
+    window.poi=function(){
+      oldPoi.apply(this,arguments);
+      if(guide===1){
+        guide=2;
+        localStorage.setItem('cityGuideStep',guide);
+        setTimeout(show,500);
+      }
+    };
+  }
+
+  const oldChoose=window.choose;
+  if(oldChoose){
+    window.choose=function(){
+      oldChoose.apply(this,arguments);
+      if(guide===2){
+        guide=3;
+        localStorage.setItem('cityGuideStep',guide);
+        setTimeout(show,500);
+      }
+    };
+  }
+
+  const oldAdvance=window.advance;
+  if(oldAdvance){
+    window.advance=function(){
+      oldAdvance.apply(this,arguments);
+      if(guide===3){
+        guide=4;
+        localStorage.setItem('cityGuideStep',guide);
+        setTimeout(show,500);
+      }
+    };
+  }
+
+  if(document.getElementById('game')&&!document.getElementById('game').classList.contains('hidden')){
+    setTimeout(show,700);
+  }
+})();
+</script>
 </body>
 </html>
