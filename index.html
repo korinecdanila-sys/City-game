@@ -52,6 +52,65 @@ button:active:not(:disabled){transform:scale(.975)}
 .news-item:last-child{border-bottom:0}
 .news-item p{font:14px/1.45 system-ui,sans-serif;color:#dde5da;margin:4px 0 0}
 .news-day{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#c9a06a}
+
+/* Быстрые показатели на главной */
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0 12px}
+.quick-i{background:#21323a;border:1px solid #33474f;border-radius:10px;padding:9px 4px;text-align:center}
+.quick-i b{display:block;font-size:17px;color:var(--gold)}
+.quick-i small{display:block;font-size:9px;color:#9fb2ba;margin-top:2px}
+.applicant{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #2c3f46}
+.applicant:last-child{border-bottom:0}
+.applicant-btns{display:flex;gap:6px;flex:0 0 auto}
+.applicant-btns button{padding:8px 11px;font-size:12px;border-radius:8px}
+@media(max-width:380px){.quick{grid-template-columns:repeat(2,1fr)}}
+
+.news-click{cursor:pointer;border-left:2px solid #7a6a4a;padding-left:10px;transition:background .15s}
+.news-click:hover{background:#ffffff08;border-left-color:var(--gold)}
+
+/* Мини-игры */
+.mini-grid{display:grid;gap:6px;margin:12px 0}
+.pipes{grid-template-columns:repeat(5,1fr)}
+.wires{grid-template-columns:repeat(4,1fr);max-width:260px}
+.m3{grid-template-columns:repeat(6,1fr);max-width:300px}
+.mem{grid-template-columns:repeat(4,1fr);max-width:280px}
+.mini-grid button{aspect-ratio:1;padding:0;border-radius:8px;font-size:18px;display:flex;align-items:center;justify-content:center}
+.pipe{border:1px solid #4a6068;background:#1f3037;color:#cfe3ea}
+.pipe.empty{border-color:#26343a;background:#141f24;color:#3a4a51}
+.pipe.r1{transform:rotate(90deg)}
+.pipe.r2{transform:rotate(180deg)}
+.pipe.r3{transform:rotate(270deg)}
+.wire{background:#1a2a31;border:1px solid #33474f;font-size:12px}
+.wire.on{background:#2f5566;border-color:#79b3c9}
+.wire.pair{background:#4a3a2a;border-color:var(--gold);color:var(--gold)}
+.m3c{border:1px solid #2b3d45}
+.m3c.c0{background:#8a5a4a}
+.m3c.c1{background:#4a7a62}
+.m3c.c2{background:#4a5f8a}
+.memc{background:#1f3037;border:1px solid #3d545c;font-size:20px}
+.memc.open{background:#2c4a56;border-color:#7aa7b6}
+.calc{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:16px}
+.calc button{min-width:34px;min-height:34px;border-radius:8px;padding:0}
+.sortrow{display:flex;gap:10px;margin:12px 0}
+.cup{flex:1;min-height:60px;border:1px dashed #4a6068;border-radius:10px;display:flex;align-items:flex-end;justify-content:center;padding:6px;font-size:18px;color:#7fb0c0}
+.sortbtns{display:flex;gap:8px}
+.sortbtns button{flex:1}
+
+/* Окно процесса строительства */
+.busy-overlay{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;background:#050b0ee6}
+.busy-card{width:min(300px,86vw);padding:22px 20px;text-align:center;background:#16242a;border:1px solid #4d666f;border-radius:16px;box-shadow:0 20px 60px #000a}
+.busy-card p{margin:14px 0 12px;font-size:14px;color:#d9e3dd}
+.busy-spinner{width:34px;height:34px;margin:0 auto;border:3px solid #2f464e;border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+.busy-bar{height:5px;background:#0f1a1f;border-radius:5px;overflow:hidden}
+.busy-bar i{display:block;height:100%;width:0;background:var(--gold);animation:fill 1.6s ease-out forwards}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fill{to{width:100%}}
+@media(prefers-reduced-motion:reduce){.busy-spinner{animation:none}.busy-bar i{animation:none;width:100%}}
+
+/* Точка-подсказка на вкладке: куда идти */
+nav button{position:relative}
+nav button.has-dot::after{content:'';position:absolute;top:4px;right:calc(50% - 16px);width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold)}
+
+.m3c.sel{outline:3px solid var(--gold);outline-offset:-3px}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head><body><div id="app"></div><div id="toast" role="status" hidden></div><dialog id="modal"><div id="modalContent"></div><button id="closeModal">Закрыть</button></dialog><noscript>Для игры нужен JavaScript.</noscript><script type="module">const E=(...args)=>escapeHTML(...args);
 // Standalone deterministic game rules. All currency is fictional; no I/O or payments.
 const SAVE_VERSION = 2;
@@ -93,8 +152,9 @@ function newGame(now = Date.now()) {
     settlement: {invited: 0, arriving: [], upToDate: 0, readmitted: 0, applicants: [], nextApplicant: 1, firstBatchArrived: false},
     seed: now % 2147483647,
     // Дневной цикл: день закрывается действиями, а не кнопкой.
-    dayState: {actionsLeft: 2, questsDone: [], talkedTo: [], adSkipUsed: false},
+    dayState: {actionsLeft: 2, questsDone: [], talkedTo: [], adSkipUsed: false, progressed: false},
     news: [],
+    items: [],
   };
 }
 /** Structural and cross-field validation, not authentication: local saves are user-editable. */
@@ -105,6 +165,7 @@ function validateSave(s) {
     requireRule(s.lastNow >= s.startedAt && integer(s.day, 0, 365) && integer(s.money) && integer(s.population, 0, 10000) && s.target === 10000 && ['playing', 'won', 'lost'].includes(s.status), 'INVALID_SAVE', 'Неверные основные поля сохранения.');
     requireRule(typeof s.firstArrivalClaimed === 'boolean' && typeof s.disruption === 'boolean' && integer(s.nextHouseId, 2, 81), 'INVALID_SAVE', 'Неверные флаги сохранения.');
     requireRule(obj(s.settlement) && Array.isArray(s.settlement.applicants) && Array.isArray(s.settlement.arriving), 'INVALID_SAVE', 'Неверная очередь заселения.');
+    requireRule(Array.isArray(s.items), 'INVALID_SAVE', 'Неверный список предметов.');
     requireRule(obj(s.dayState) && integer(s.dayState.actionsLeft, 0, 2) && Array.isArray(s.dayState.questsDone) && Array.isArray(s.dayState.talkedTo), 'INVALID_SAVE', 'Неверное состояние дня.');
     for (const a of s.settlement.applicants) requireRule(obj(a) && typeof a.id === 'string' && integer(a.size, 1, 6) && ['free', 'buy'].includes(a.kind), 'INVALID_SAVE', 'Неверная заявка на заселение.');
     requireRule(Array.isArray(s.houses) && s.houses.length >= 1 && s.houses.length <= 80 && s.nextHouseId === s.houses.length + 1, 'INVALID_SAVE', 'Неверный список домов.');
@@ -226,7 +287,8 @@ function departures(s, effects) {
 function tick(s, days, now, effects) {
   for (let i = 0; i < days && s.status === 'playing'; i++) {
     s.day++;
-    const expense = Math.ceil(SERVICES.reduce((total, k) => total + s.infrastructure[k].level * (120 + (k === 'heat' ? 30 * season(s, now).fuelMultiplier : 30)), 0)) + (s.disruption ? 100 : 0) + s.houses.reduce((sum, h) => sum + h.entrances.filter(e => e.stage === 3 && e.residents === 0).length * 10, 0);
+    const upkeepDiscount = (s.items || []).includes('ledger') ? 0.9 : 1;
+    const expense = Math.ceil((SERVICES.reduce((total, k) => total + s.infrastructure[k].level * (120 + (k === 'heat' ? 30 * season(s, now).fuelMultiplier : 30)), 0) + (s.disruption ? 100 : 0) + s.houses.reduce((sum, h) => sum + h.entrances.filter(e => e.stage === 3 && e.residents === 0).length * 10, 0)) * upkeepDiscount);
     const dayIncome = s.population * 16;
     earn(s, dayIncome);
     if (s.money < expense) { spend(s, s.money); s.status = 'lost'; effects.push('Банкротство: не удалось оплатить ежедневные расходы.'); }
@@ -409,8 +471,27 @@ const DAY_COST = {
   dialogue: 1, help: 0, declineApplicant: 1, quest: 1
 };
 
+const PROGRESS_TYPES = ['repair', 'infrastructure', 'buildHouse', 'acceptApplicant', 'quest'];
+
+/** Итог дня: день без развития — потеря доверия. */
+function endOfDayCheck(s) {
+  if (!s.dayState.progressed) {
+    s.moralePenalty = (s.moralePenalty || 0) + 1;
+    news(s, 'День прошёл без развития города. Жители начали ворчать.');
+    if (s.moralePenalty >= 3) {
+      for (const p of Object.values(s.characters)) if (p.met && p.health !== 'dead') p.relation = Math.max(0, p.relation - 2);
+      news(s, 'Три дня без движения: люди теряют веру в вас.');
+      s.moralePenalty = 0;
+    }
+  } else {
+    s.moralePenalty = 0;
+  }
+  s.dayState.progressed = false;
+}
+
 function spendAction(s, type, effects) {
   if (!DAY_COST[type]) return;
+  if (PROGRESS_TYPES.includes(type)) s.dayState.progressed = true;
   s.dayState.actionsLeft -= DAY_COST[type];
   if (s.dayState.actionsLeft > 0) return;
   // День кончился: идёт ночь, приходят люди, уходят люди, начисляются деньги.
@@ -418,6 +499,7 @@ function spendAction(s, type, effects) {
   s.dayState.actionsLeft = 2;
   s.dayState.questsDone = s.dayState.questsDone.filter(q => q.day === s.day);
   s.dayState.adSkipUsed = false;
+  endOfDayCheck(s);
   effects.push('Наступил новый день.');
 }
 
@@ -517,10 +599,12 @@ function act(state, action, now = Date.now()) {
         requireRule(Array.isArray(action.rewardIds) && action.rewardIds.length > 0, 'AD_UNVERIFIED', 'Пропуск дня награждается только после подтверждения рекламы.');
         requireRule(!s.dayState.adSkipUsed, 'ALREADY_RESOLVED', 'Сегодня уже пропускали день за рекламу.');
         s.dayState.adSkipUsed = true;
+        s.dayState.progressed = false;
         tick(s, 1, now, effects);
         if (s.status === 'playing') advanceSettlement(s, effects);
         s.dayState.adSkipUsed = false; // новый день — новый пропуск
         s.dayState.actionsLeft = 2;
+        endOfDayCheck(s);
         effects.push('День прожит за рекламу. Действия не тратились.');
       } else {
         requireRule(integer(action.days, 1, 30), 'INVALID_ACTION', 'Ожидание: от 1 до 30 игровых суток.');
@@ -1465,6 +1549,306 @@ function laterMeeting(id) {
   return LATER_MEETINGS[id] || null;
 }
 
+// Мини-игры: трубы (вода), провода (электричество), три-в-ряд (раскопки).
+// Чистая логика без DOM — интерфейс подключается отдельно.
+
+// ---------- Трубы: повернуть элементы так, чтобы вода дошла до выхода ----------
+// Клетки: 0 пусто, 1 прямая, 2 угол, 3 тройник, 4 конец.
+// Состояние: массив поворотов 0..3.
+const PIPE_SOLVES = [
+  { size: 5, cells: ['..3..', '..|..', '--2--', '..|..', '..4..'] },
+  { size: 5, cells: ['2-1-3', '....|', '..4..', '.....', '.....'] }
+];
+
+function newPipes(seed = 0) {
+  const board = PIPE_SOLVES[Math.abs(seed) % PIPE_SOLVES.length];
+  const n = board.size;
+  const cells = [];
+  for (const row of board.cells) {
+    for (const ch of row) cells.push({ type: ch });
+  }
+  // Стартовые повороты перемешиваем детерминированно.
+  const turns = cells.map((c, i) => (c.type === '.' ? 0 : (i * 7 + seed) % 4));
+  return { size: n, cells, turns };
+}
+
+/** Проверка: соединена ли сеть от входа (0,2) до выхода (4,2). */
+function pipesSolved(board) {
+  const { size, cells, turns } = board;
+  const start = { x: 2, y: 0 }, goal = { x: 2, y: 4 };
+  const seen = new Set();
+  const stack = [start];
+  while (stack.length) {
+    const p = stack.pop();
+    const key = p.x + ',' + p.y;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (p.x === goal.x && p.y === goal.y) return true;
+    const idx = p.y * size + p.x;
+    const cell = cells[idx];
+    if (!cell || cell.type === '.' || cell.type === '4' && idx !== goal.y * size + goal.x) continue;
+    const dirs = openDirs(cell.type, turns[idx] || 0);
+    for (const d of dirs) {
+      const nx = p.x + (d === 'r' ? 1 : d === 'l' ? -1 : 0);
+      const ny = p.y + (d === 'd' ? 1 : d === 'u' ? -1 : 0);
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+      const nIdx = ny * size + nx;
+      const nTurn = turns[nIdx] || 0;
+      const back = { r: 'l', l: 'r', u: 'd', d: 'u' }[d];
+      if (openDirs(cells[nIdx].type, nTurn).includes(back)) stack.push({ x: nx, y: ny });
+    }
+  }
+  return false;
+}
+
+function openDirs(type, turn) {
+  const base = { '1': ['l', 'r'], '2': ['l', 'd'], '3': ['l', 'r', 'd'], '4': ['u'] }[type] || [];
+  const order = ['u', 'r', 'd', 'l'];
+  return base.map(d => order[(order.indexOf(d) + turn) % 4]);
+}
+
+function rotatePipe(board, index) {
+  board.turns[index] = ((board.turns[index] || 0) + 1) % 4;
+  return board;
+}
+
+// ---------- Провода: собрать цепь, соединяя контакты по порядку ----------
+// Плата 4×4. Нужно соединить пары контактов, не пересекая линии.
+function newWires(seed = 0) {
+  const pairs = [
+    [{ x: 0, y: 0 }, { x: 3, y: 2 }],
+    [{ x: 1, y: 3 }, { x: 3, y: 0 }]
+  ];
+  const paths = pairs.map(() => []);
+  return { size: 4, pairs, paths, seed };
+}
+
+/** Соединить соседние клетки: клик по клетке рядом с последней точкой пути. */
+function addWirePoint(board, pairIndex, x, y) {
+  const path = board.paths[pairIndex];
+  const pair = board.pairs[pairIndex];
+  const isStart = path.length === 0;
+  const target = isStart
+    ? (x === pair[0].x && y === pair[0].y ? pair[0] : x === pair[1].x && y === pair[1].y ? pair[1] : null)
+    : { x, y };
+  if (!target) return { ok: false, reason: 'Начните с контакта этой пары.' };
+  const last = path[path.length - 1];
+  if (!isStart && Math.abs(last.x - x) + Math.abs(last.y - y) !== 1) {
+    return { ok: false, reason: 'Соединяйте только соседние клетки.' };
+  }
+  if (!isStart && board.paths.some((p, i) => i !== pairIndex && p.some(pt => pt.x === x && pt.y === y))) {
+    return { ok: false, reason: 'Здесь уже проходит другой провод.' };
+  }
+  path.push(target);
+  return { ok: true };
+}
+
+function wiresSolved(board) {
+  return board.paths.every((path, i) => {
+    const end = board.pairs[i][1], start = board.pairs[i][0];
+    const last = path[path.length - 1];
+    return path.length > 1 && last.x === (path[0].x === start.x && path[0].y === start.y ? end.x : start.x)
+      && last.y === (path[0].x === start.x && path[0].y === start.y ? end.y : start.y);
+  });
+}
+
+// ---------- Три-в-ряд: меняем соседние, собираем линии, очки за разрушение ----------
+// Очки: 100 за фигуру, множитель растёт с длиной линии и числом одновременных линий.
+const COLORS = [0, 1, 2, 3, 4];
+const MATCH_TARGET = 1500;
+const MATCH_MOVES = 20;
+
+let rng = 1;
+function nextRandom() { rng = (rng * 1103515245 + 12345) % 2147483648; return rng / 2147483648; }
+function randColor() { return COLORS[Math.floor(nextRandom() * COLORS.length)]; }
+
+function noRun(grid, x, y, c) {
+  return !((x >= 2 && grid[y][x - 1] === c && grid[y][x - 2] === c) ||
+           (y >= 2 && grid[y - 1][x] === c && grid[y - 2][x] === c));
+}
+
+function fillCell(grid, x, y) {
+  let c, guard = 0;
+  do { c = randColor(); guard++; } while (!noRun(grid, x, y, c) && guard < 50);
+  grid[y][x] = c;
+}
+
+function newMatch3(seed = 1) {
+  rng = Math.abs(seed) || 1;
+  const grid = Array.from({ length: 6 }, () => Array(6).fill(null));
+  for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) fillCell(grid, x, y);
+  const board = { grid, score: 0, turns: MATCH_MOVES, target: MATCH_TARGET, combo: 0 };
+  // На доске должен быть хотя бы один возможный ход.
+  while (!hasMove(board) && board.turns > 0) shuffleBoard(board);
+  return board;
+}
+
+function runsAt(grid) {
+  const cells = new Set();
+  let lines = 0;
+  for (let y = 0; y < 6; y++) {
+    let x = 0;
+    while (x < 6) {
+      const c = grid[y][x]; let len = 1;
+      while (x + len < 6 && grid[y][x + len] === c) len++;
+      if (c !== null && len >= 3) { lines++; for (let i = 0; i < len; i++) cells.add(y * 6 + x + i); }
+      x += len;
+    }
+  }
+  for (let x = 0; x < 6; x++) {
+    let y = 0;
+    while (y < 6) {
+      const c = grid[y][x]; let len = 1;
+      while (y + len < 6 && grid[y + len][x] === c) len++;
+      if (c !== null && len >= 3) { lines++; for (let i = 0; i < len; i++) cells.add((y + i) * 6 + x); }
+      y += len;
+    }
+  }
+  return { cells, lines };
+}
+
+function swapCells(board, a, b) {
+  const { grid } = board;
+  if (a.x === b.x && a.y === b.y) return { ok: false, reason: 'Выберите два соседних кубика.' };
+  if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) return { ok: false, reason: 'Менять можно только соседние.' };
+  const t = grid[a.y][a.x]; grid[a.y][a.x] = grid[b.y][b.x]; grid[b.y][b.x] = t;
+  if (runsAt(grid).cells.size === 0) {
+    const back = grid[a.y][a.x]; grid[a.y][a.x] = grid[b.y][b.x]; grid[b.y][b.x] = back;
+    return { ok: false, reason: 'Здесь линии не получится.' };
+  }
+  board.turns -= 1;
+  return { ok: true };
+}
+
+/** Убрать линии, уронить вниз, добавить сверху. Возвращает очки за каскад. */
+function resolveMatches(board) {
+  let total = 0, chain = 0, guard = 0;
+  while (guard++ < 60) {
+    const runs = runsAt(board.grid);
+    if (!runs.cells.size) break;
+    chain++;
+    // Чем больше фигур за ход — тем выше множитель.
+    const base = runs.cells.size * 100;
+    const multiplier = runs.lines + (chain - 1);
+    total += base * Math.max(1, multiplier);
+    for (const idx of runs.cells) board.grid[Math.floor(idx / 6)][idx % 6] = null;
+    dropAndRefill(board.grid);
+  }
+  board.score += total;
+  board.combo = chain;
+  return total;
+}
+
+function dropAndRefill(grid) {
+  for (let x = 0; x < 6; x++) {
+    const column = [];
+    for (let y = 5; y >= 0; y--) if (grid[y][x] !== null) column.push(grid[y][x]);
+    while (column.length < 6) column.push(null);
+    for (let y = 5; y >= 0; y--) grid[y][x] = column[5 - y];
+    for (let y = 0; y < 6; y++) if (grid[y][x] === null) fillCell(grid, x, y);
+  }
+}
+
+function hasMove(board) {
+  const { grid } = board;
+  for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) {
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx >= 6 || ny >= 6) continue;
+      const t = grid[y][x]; grid[y][x] = grid[ny][nx]; grid[ny][nx] = t;
+      const ok = runsAt(grid).cells.size > 0 ? true : false;
+      const back = grid[y][x]; grid[y][x] = grid[ny][nx]; grid[ny][nx] = back;
+      if (ok) return true;
+    }
+  }
+  return false;
+}
+
+function shuffleBoard(board) {
+  do {
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) fillCell(board.grid, x, y);
+  } while (!hasMove(board));
+  return board;
+}
+
+const MATCH_WIN_SCORE = MATCH_TARGET;
+
+// ---------- Память: найти пары инструментов ----------
+function newMemory(seed = 1) {
+  const icons = ['🔧', '⚡', '💧', '🪵', '🔩', '🧰', '⛏️', '🪣'];
+  let rnd = Math.abs(seed) || 1;
+  const next = () => { rnd = (rnd * 48271) % 2147483647; return rnd / 2147483647; };
+  const deck = [...icons, ...icons].sort(() => next() - 0.5).slice(0, 12);
+  return { cards: deck.map(icon => ({ icon, open: false, done: false })), flipped: [], moves: 10 };
+}
+
+function flipMemory(board, index) {
+  const card = board.cards[index];
+  if (!card || card.done || board.flipped.includes(index)) return { ok: false };
+  if (board.flipped.length >= 2) board.flipped = [];
+  card.open = true;
+  board.flipped.push(index);
+  if (board.flipped.length === 2) {
+    board.moves -= 1;
+    const [a, b] = board.flipped.map(i => board.cards[i]);
+    if (a.icon === b.icon) { a.done = b.done = true; board.flipped = []; }
+    else setTimeout(() => { a.open = b.open = false; }, 700);
+  }
+  return { ok: true, solved: board.cards.every(c => c.done), movesLeft: board.moves };
+}
+
+// ---------- Смета: расставить + и −, чтобы выйти на цель ----------
+function newCalc(seed = 1) {
+  const nums = [1200, 800, 1500, 600, 400];
+  return { nums, target: 300, signs: nums.slice(1).map(() => '+'), solved: false };
+}
+
+function calcValue(board) {
+  return board.nums.reduce((sum, n, i) => i === 0 ? n : sum + (board.signs[i - 1] === '+' ? n : -n), 0);
+}
+
+function toggleCalcSign(board, index) {
+  board.signs[index] = board.signs[index] === '+' ? '-' : '+';
+  board.solved = calcValue(board) === board.target;
+  return board.solved;
+}
+
+// ---------- Сортировка: разложить контейнеры по цветам ----------
+function newSort(seed = 1) {
+  let rnd = Math.abs(seed) || 1;
+  const next = () => { rnd = (rnd * 48271) % 2147483647; return rnd / 2147483647; };
+  const pool = [0, 1, 2, 0, 1, 2, 0, 1, 2].sort(() => next() - 0.5);
+  return { cups: { A: [], B: [], C: [] }, pool, movesLeft: 12 };
+}
+
+function pourSort(board, from, to) {
+  if (!board.pool.length) return { ok: false, reason: 'Контейнеров больше нет.' };
+  const cup = board.cups[to];
+  if (!cup) return { ok: false, reason: 'Нет такого ящика.' };
+  if (cup.length >= 3) return { ok: false, reason: 'Короб уже полон.' };
+  cup.push(board.pool.shift());
+  const solved = Object.values(board.cups).every(c => c.length === 3 && new Set(c).size === 1);
+  return { ok: true, solved };
+}
+
+// ---------- Загадка ----------
+const RIDDLES = [
+  { q: 'Что для города вода?', a: ['жизнь', 'life'], hint: 'Без него не заселить дом' },
+  { q: 'Кто следит за трубами и давлением?', a: ['сантехник', 'инженер', 'водник'], hint: 'Специалист по воде' },
+  { q: 'Без чего остаётся тёмный подъезд?', a: ['электричество', 'свет', 'электрика'], hint: 'Провода и щит' }
+];
+
+function newRiddle(seed = 0) {
+  const r = RIDDLES[Math.abs(seed) % RIDDLES.length];
+  return { question: r.q, answers: r.a, hint: r.hint, solved: false };
+}
+
+function answerRiddle(board, text) {
+  const norm = String(text || '').toLowerCase().trim();
+  board.solved = board.answers.some(a => norm.includes(a));
+  return board.solved;
+}
+
 const ASSET_BASE='https://raw.githubusercontent.com/korinecdanila-sys/City-game/main/';
 const file=name=>ASSET_BASE+encodeURIComponent(name+'.jpeg');
 /** Portraits provided by the user in City-game repository. */
@@ -1497,6 +1881,7 @@ function readSave(storage,validate,migrate=null){
  }catch(e){return {data:null,error:'Сохранение недоступно или повреждено. Оно не удалено.'};}
 }
 function writeSave(storage,data){try{storage.setItem(STORAGE_KEY,JSON.stringify(data));return true;}catch{return false;}}
+
 
 
 
@@ -1541,6 +1926,53 @@ function showNextMeeting(){
    </div></div>`;
   box.style.display='flex';
 }
+let mini=null;
+function miniOpen(kind,onWin){
+  const seed=(Date.now()%9000);
+  const board = kind==='pipes'?MG.newPipes(seed%2):kind==='wires'?MG.newWires(seed):kind==='match3'?MG.newMatch3(seed):kind==='memory'?MG.newMemory(seed):kind==='calc'?MG.newCalc(seed):kind==='sort'?MG.newSort(seed):MG.newRiddle(seed);
+  mini={kind,board,onWin,sel:null};
+  miniModal();
+}
+function miniClose(){mini=null;const b=document.getElementById('dialogueBox');if(b)b.style.display='none';}
+function miniWin(){
+  const cb=mini?.onWin;mini=null;const b=document.getElementById('dialogueBox');if(b)b.style.display='none';
+  if(cb)cb();
+}
+function miniModal(){
+ const box=document.getElementById('dialogueBox')||(()=>{const b=document.createElement('div');b.id='dialogueBox';b.className='dialogue-overlay';document.body.appendChild(b);return b;})();
+ if(!mini){box.style.display='none';return;}
+ const {kind,board}=mini;
+ const titles={pipes:'Водопровод · поверните трубы',wires:'Электрика · протяните провода',match3:'Раскопки · соберите три в ряд',memory:'Склад · найдите пары',calc:'Смета · сведите к нулю',sort:'Сортировка · по цветам',riddle:'Загадка Анатолия'};
+ let body='';
+ if(kind==='pipes'){
+   body='<div class="mini-grid pipes">'+board.cells.map((c,i)=>`<button class="pipe ${c.type==='.'?'empty':''} r${board.turns[i]||0}" data-action="miniPipe" data-id="${i}">${({'.':'','1':'─','2':'└','3':'├','4':'•'}[c.type]||'')}</button>`).join('')+'</div>';
+ } else if(kind==='wires'){
+   body='<div class="mini-grid wires">'+Array.from({length:16},(_,i)=>{const x=i%4,y=Math.floor(i/4);
+     const pi=board.pairs.findIndex(p=>p.some(pt=>pt.x===x&&pt.y===y));
+     const on=board.paths.some(p=>p.some(pt=>pt.x===x&&pt.y===y));
+     return `<button class="wire ${on?'on':''} ${pi>=0?'pair p'+pi:''}" data-action="miniWire" data-id="${x},${y}">${pi>=0?'●':''}</button>`;}).join('')+'</div>';
+ } else if(kind==='match3'){
+   body='<div class="mini-grid m3">'+board.grid.flatMap((row,y)=>row.map((c,x)=>`<button class="m3c c${c} ${mini.sel&&mini.sel.x===x&&mini.sel.y===y?'sel':''}" data-action="miniSwap" data-id="${x},${y}"></button>`)).join('')+'</div>'
+     +`<p><small>Очки: ${board.score} из ${board.target} · ходов: ${board.turns}</small></p>`
+     +'<div class="track"><span style="width:'+Math.min(100,board.score/board.target*100)+'%"></span></div>';
+ } else if(kind==='memory'){
+   body='<div class="mini-grid mem">'+board.cards.map((c,i)=>`<button class="memc ${c.open||c.done?'open':''}" data-action="miniFlip" data-id="${i}">${c.open||c.done?c.icon:'?'}</button>`).join('')+'</div>';
+ } else if(kind==='calc'){
+   body='<p class="calc">'+board.nums.map((n,i)=>i===0?('<b>'+n+'</b>'):('<button data-action="miniSign" data-id="'+(i-1)+'">'+board.signs[i-1]+'</button><b>'+n+'</b>')).join(' ')+'</p><p>Итого: <strong>'+MG.calcValue(board)+'</strong> · нужно '+board.target+'</p>';
+ } else if(kind==='sort'){
+   body='<div class="sortrow">'+Object.entries(board.cups).map(([k,v])=>`<div class="cup ${['', 'a','b'][['','A','B','C'].indexOf(k)]}"><span>${v.map(c=>'●').join('')}</span></div>`).join('')+'</div>'
+     +'<div class="pool">'+(board.pool.length?`Следующий: <b>${'●'}</b>`:'Пусто')+'</div>'
+     + '<div class="sortbtns">'+Object.keys(board.cups).map(k=>`<button data-action="miniPour" data-id="${k}">В ${k}</button>`).join('')+'</div>';
+ } else {
+   body='<p>'+board.question+'</p><input id="riddleInput" placeholder="Ваш ответ" maxlength="30">';
+ }
+ box.innerHTML=`<div class="dialogue-panel"><div class="dialogue-main">
+  <div class="kicker">Мини-игра</div><h3>${titles[kind]}</h3>
+  ${body}
+  <div class="dialogue-choices">${button('Проверить','miniCheck','',true)}${button('Оплатить бригаду · $2 500','miniPay')}</div>
+ </div></div>`;
+ box.style.display='flex';
+}
 function dialogueModal(){
   const c=model.conversation;
   if(!c){dialogueOpen=false;return;}
@@ -1567,10 +1999,26 @@ function dialogueModal(){
 function conversationList(){return `<section class="card"><h2>Разговоры с жителями</h2><p>Узнайте личную историю. Каждый разговор меняет отношения только один раз.</p>${Object.values(CONVERSATIONS).map(c=>{const done=model.completedConversations.includes('conversation:'+c.id+':complete');const dead=model.game.characters[c.characterId]?.health==='dead'||!model.game.characters[c.characterId]?.met;return button(E(c.title)+(done?' · завершён':''),'conversation',`data-id="${c.id}" ${done||dead?'disabled':''}`)}).join('<br>')}</section>`;}
 const currency=n=>'$'+Number(n).toLocaleString('ru-RU');
 const serviceNames={power:'Электроснабжение',water:'Вода',heat:'Котельная',sewer:'Канализация',supply:'Питание и быт'};
-function save(){if(!writeSave(storage,model))warning='Сохранение недоступно: не закрывайте страницу.';}
+function save(){model.game.items=model.items||[];if(!writeSave(storage,model))warning='Сохранение недоступно: не закрывайте страницу.';}
 function toast(text){const el=document.getElementById('toast');el.textContent=text;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,4500);}
 function button(text,action,attrs='',primary=false){return `<button class="${primary?'primary ':''}full" data-action="${action}" ${attrs}>${text}</button>`;}
-function doAction(action){const result=act(model.game,action,Date.now());if(!result.ok){toast(result.error?.message||'Действие недоступно');return;}model.game=result.state;model.history.unshift(...result.effects.map(text=>({day:model.game.day,text})));model.history=model.history.slice(0,100);save();render();checkLaterArrivals();if(result.effects.length)toast(result.effects[0]);}
+function busyOverlay(text,ms){
+  const box=document.getElementById('busyBox')||(()=>{const b=document.createElement('div');b.id='busyBox';b.className='busy-overlay';document.body.appendChild(b);return b;})();
+  box.innerHTML=`<div class="busy-card"><div class="busy-spinner"></div><p>${E(text)}</p><div class="busy-bar"><i></i></div></div>`;
+  box.style.display='flex';
+  return new Promise(res=>setTimeout(()=>{box.style.display='none';res();},ms));
+}
+function daySummary(){
+ const s=model.game;
+ const last=(s.news||[]).find(n=>n.text&&n.text.startsWith('Заработано'));
+ return last?last.text:'Наступает новый день…';
+}
+function doAction(action){
+ const dayBefore=model.game.day;
+ const result=act(model.game,action,Date.now());if(!result.ok){window.__lastActionError=result.error;toast(result.error?.message||'Действие недоступно');return;}model.game=result.state;model.history.unshift(...result.effects.map(text=>({day:model.game.day,text})));
+ const dayChanged=model.game.day!==dayBefore;model.history=model.history.slice(0,100);save();
+ if(dayChanged){busyOverlay(daySummary(),1600).then(()=>{render(true);checkLaterArrivals();if(result.effects.length)toast(result.effects[0]);});return;}
+ render();checkLaterArrivals();if(result.effects.length)toast(result.effects[0]);}
 function art(){return cityImage(['spring','summer','autumn','winter'][season(model.game).index]||'spring');}
 function speakerPortrait(name){return ['Анатолий','Анатолий Зорин','Виктор Северин','Илья Белов','Дарья Ким','Марина Белова','Тимур Хасанов','Светлана Руденко','Сергей Баранов','Павел Ершов','Елена Хасанова','Алина Нестерова'].includes(String(name))?portrait(String(name).startsWith('Анатолий')?'Анатолий':String(name)):'';}
 function intro(){
@@ -1584,11 +2032,48 @@ function intro(){
  const naming=scene.id==='night_talk'?`<section class="card"><label for="storyNameInput">Как вы назовёте город?</label><p><small>Вы познакомились с Анатолием. До утреннего осмотра предложите своё имя города — его можно будет изменить позднее.</small></p><input id="storyNameInput" maxlength="30" value="${E(model.name)}"></section>`:'';
  app.innerHTML=`<main>${art()}<article class="card story-card"><div class="kicker">Глава 1 · ${E(scene.speaker||'Начало')}</div>${speakerPortrait(scene.speaker)}<h1>${E(scene.title)}</h1><p>${E(speak(scene.speaker,text))}</p>${naming}<div class="dialogue">${(scene.choices||[]).map((c,i)=>`<section class="card">${button(E(c.label),'story',`data-option="${i}"`,i===0)}${c.severe?'<p><small>Этот выбор может повлечь серьёзные последствия — и хорошие, и плохие.</small></p>':''}</section>`).join('')}</div><small>Выборы пролога сохраняют сюжетные отметки и запись в журнале. Стартовые $200 000 уже включены в начальный бюджет и не начисляются повторно. Сюжетные планы сами по себе не выполняют строительные работы и не меняют отношения персонажей. Локальная одиночная версия; сезоны меняются каждые семь реальных суток.</small></article></main>`;
 }
-function overview(){const s=model.game;const ready=s.houses.flatMap(h=>h.entrances).filter(e=>e.stage===3).length;return `<section class="card adviser">${portrait()}<div class="kicker">Анатолий · следующий шаг</div><h2>${s.population?'У города появились люди':'Начнём с одного подъезда'}</h2><p>${s.population?'Следите за резервом мощности, расходами и здоровьем людей. Не нужно подключать пустые дома без плана.':'Расчистите подъезд, восстановите его и подключите пять основных систем. Затем пригласите первую группу из общежития.'}</p><div class="clear"></div>${button('Открыть план работ →','tab','data-id="build"',true)}</section>${!s.settlement.firstBatchArrived?`<section class="card adviser"><div class="kicker">Первая партия</div><h2>130 человек из общежития</h2>
- <p>Марина прислала список. Люди готовы ехать, но им нужны готовые комнаты и работающая вода, свет и тепло.</p>
- <p><small>${(()=>{const seats=s.houses.reduce((n,h)=>n+h.entrances.filter(e=>e.stage===3).reduce((m,e)=>m+(130-e.residents),0),0);const cap=Math.min(...['power','water','heat','sewer','supply'].map(k=>s.infrastructure[k].capacity));const need=[];if(seats<40)need.push('подготовьте хотя бы один подъезд (сейчас мест: '+seats+')');if(cap<130)need.push('поднимите мощность систем до 130 (сейчас: '+cap+')');return need.length?'Нужно: '+need.join(', '):'Всё готово — можно встречать.';})()}</small></p>
- ${button('Встретить первую партию','meetBatch','',true)}</section>`:''}
- ${adCard('money','Выплата в казну раз в день','Поддержите проект и получите $3 000 один раз за сутки.')}${art()}<section class="card"><h3>Ваш город</h3><p>Домов: ${s.houses.length}. Готовых подъездов: ${ready}. Население: ${s.population}.</p><p>Цель: ${s.target} жителей до конца 365-го дня.</p><small>Доход за всё время: ${currency(s.ledger.income)} · расходы: ${currency(s.ledger.expenses)}. Содержание идёт при игровых действиях, не во время отсутствия.</small></section>${s.dayState.actionsLeft > 0 ? button(`Действий сегодня: ${s.dayState.actionsLeft}`, 'noop', 'disabled') : button('Пропустить день за рекламу', 'adSkip')}`;}
+function overview(){
+ const s=model.game;
+ const freeSeats=s.houses.reduce((n,h)=>n+h.entrances.filter(e=>e.stage===3).reduce((m,e)=>m+(130-e.residents),0),0);
+ const cap=Math.min(...['power','water','heat','sewer','supply'].map(k=>s.infrastructure[k].capacity));
+ const applicants=(s.settlement.applicants||[]).length;
+ const sick=Object.values(s.characters).filter(c=>c.met&&(c.health==='injured'||c.health==='critical')).length;
+ const dayNet=(s.population*16)-Math.ceil(['power','water','heat','sewer','supply'].reduce((t,k)=>t+s.infrastructure[k].level*150,0));
+
+ // Подсказка: что делать дальше, по приоритету
+ let hint;
+ if(!s.settlement.firstBatchArrived&&freeSeats>=40&&cap>=130) hint={t:'Можно встречать первую партию',d:'Готовые комнаты и мощность есть. Позовите 130 человек из общежития.',b:'Встретить партию',a:'meetBatch'};
+ else if(freeSeats<40) hint={t:'Нужно готовое жильё',d:'Отремонтируйте и подключите подъезд — людям негде жить.',b:'К работам',a:'tab',id:'build'};
+ else if(cap<s.population+130) hint={t:'Не хватает мощности',d:'Без воды, света и тепла город не примет новых людей.',b:'К инфраструктуре',a:'tab',id:'build'};
+ else if(applicants>0) hint={t:'Ждут ответа: '+applicants, d:'Кто-то просится в город. Примите — и людей станет больше.', b:'Посмотреть заявки', a:'tab', id:'people'};
+ else if(sick>0) hint={t:'Нужна помощь людям',d:'Кто-то не может работать. Это тормозит город.',b:'К людям',a:'tab',id:'people'};
+ else hint={t:'Город живёт',d:'Принимайте заявки, стройте дома, выполняйте задания жителей.',b:'Задания',a:'tab',id:'quests'};
+
+ return `<section class="card adviser">${portrait()}<div class="kicker">Анатолий · что делать сейчас</div>
+ <h2>${E(hint.t)}</h2><p>${E(hint.d)}</p><div class="clear"></div>
+ ${button(hint.b+' →',hint.a,hint.id?`data-id="${hint.id}"`:'',true)}</section>
+
+ <section class="card"><h3>Состояние города</h3>
+ <div class="quick">
+  <div class="quick-i"><b>${applicants}</b><small>ждут заселения</small></div>
+  <div class="quick-i"><b>${freeSeats}</b><small>свободных мест</small></div>
+  <div class="quick-i"><b>${cap}</b><small>мощность</small></div>
+  <div class="quick-i"><b>${sick}</b><small>нужна помощь</small></div>
+ </div>
+ ${applicants>0?button('Посмотреть желающих заселиться →','tab','data-id="people"',true):''}
+ <p><small>Доход за день примерно $${(s.population*16).toLocaleString('ru-RU')} · содержание $${Math.ceil(['power','water','heat','sewer','supply'].reduce((t,k)=>t+s.infrastructure[k].level*150,0)).toLocaleString('ru-RU')}</small></p>
+ </section>
+
+ <section class="card"><h3>Заявки на заселение</h3>
+ ${applicants? (s.settlement.applicants||[]).slice(0,4).map(a=>`<div class="applicant">
+    <div><strong>${a.size} ${a.size===1?'человек':'человека'}</strong><br><small>${E(a.note)}</small></div>
+    <div class="applicant-btns">${button('Принять','acceptApplicant',`data-id="${a.id}"`,true)}${button('Отказать','declineApplicant',`data-id="${a.id}"`)}</div>
+  </div>`).join('') : '<p><small>Пока никто не пришёл. Заявки появляются, когда есть свободное жильё.</small></p>'}
+ </section>
+
+ <section class="card"><h3>Население</h3><p>${s.population} из ${s.target} · домов: ${s.houses.length} · день ${s.day} из 365</p>
+ <div class="track"><span style="width:${Math.min(100,s.population/s.target*100)}%"></span></div></section>`;
+}
 function tutorialStep(s){
   const e0=s.houses[0].entrances[0];
   if(e0.stage===0)return {step:'clear',title:'Шаг 1 из 4 · расчистка',text:'В подъезде мусор и разбитые двери. Начните с расчистки — без этого бригада не войдёт внутрь.'};
@@ -1665,14 +2150,24 @@ model.newsRead??=0;model.introduced.push(id);
    }
  }
 }
-function doRender(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><button class="bell" data-action="newsMenu" title="Уведомления" aria-label="Уведомления">🔔${(s.news||[]).length>model.newsRead?(s.news.length-model.newsRead):''}</button><button class="restart" data-action="resetMenu" title="Начать заново" aria-label="Начать заново">↺</button><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['quests','✦','Задания'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
-document.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b||b.disabled)return;const d=b.dataset;
+function dotFor(id){
+ const s=model.game;
+ if(!model.started)return '';
+ if(id==='build'&&s.houses.some(h=>h.entrances.some(e=>e.stage<3)))return 'build';
+ if(id==='people'&&(s.settlement.applicants||[]).length)return 'people';
+ if(id==='quests'&&(model.questsDone||[]).length>=0&&availableQuests(s,model.questsDone||[]).filter(q=>s.characters[q.giver]?.met).length)return 'quests';
+ return '';
+}
+function doRender(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><button class="bell" data-action="newsMenu" title="Уведомления" aria-label="Уведомления">🔔${(s.news||[]).length>model.newsRead?(s.news.length-model.newsRead):''}</button><button class="restart" data-action="resetMenu" title="Начать заново" aria-label="Начать заново">↺</button><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['quests','✦','Задания'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''} ${dotFor(id)===id?'has-dot':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;const d=b.dataset;
  if(d.action==='tab'){tab=d.id;render(true);window.scrollTo(0,0);return}
+ const QUEST_MINI={'anatoly_cellar':'pipes','ilya_night':'wires','darya_shift':'riddle','marina_move':'memory'};
  if(d.action==='questChoice'){
    const q=questById(d.id); if(!q||model.questsDone.includes(q.id))return;
    const c=q.choices.find(x=>x.id===d.option); if(!c||!canAfford(model.game,c)){toast('Недостаточно средств.');return;}
+   miniOpen(QUEST_MINI[q.id]||'match3',()=>{
    if(model.game.dayState.actionsLeft<=0){toast('На сегодня действий не осталось.');return;}
-   model.game.money-=c.cost||0;
+   model.game.money-=c.cost||0;model.game.ledger.expenses+=(c.cost||0);
    const rel=c.effects.relation||{};
    for(const [id,delta] of Object.entries(rel)){const p=model.game.characters[id];if(p)p.relation=Math.max(0,Math.min(100,p.relation+delta));}
    if(c.effects.item&&!model.items.includes(c.effects.item))model.items.push(c.effects.item);
@@ -1682,7 +2177,9 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-acti
    model.questsDone.push(q.id);
    model.lastChoice={quest:q.id,choice:c.id,item:c.effects.item||null,money:c.cost||0,relation:c.effects.relation||{}};
    model.history.unshift({day:model.game.day,text:q.title+': '+c.label});
-   save();render();toast(c.effects.item?('Получен предмет: '+ITEMS[c.effects.item].name):'Задание выполнено.');return;
+   save();render();toast(c.effects.item?('Получен предмет: '+ITEMS[c.effects.item].name):'Задание выполнено.');
+   });
+   return;
  }
  if(d.action==='meetBatch'){
    const res=act(model.game,{type:'meetBatch'},Date.now());
@@ -1758,18 +2255,67 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-acti
   save();render();window.scrollTo(0,0);return;
  }
  if(d.action==='rename'){model.name=document.getElementById('nameInput').value.trim()||model.name;save();render();return}
+ if(d.action==='miniPipe'){MG.rotatePipe(mini.board,Number(d.id));miniModal();return;}
+ if(d.action==='miniWire'){const [x,y]=d.id.split(',').map(Number);const pi=mini.sel===null?0:mini.sel;MG.addWirePoint(mini.board,pi,x,y);if(mini.board.paths[pi].length)mini.sel=pi;miniModal();return;}
+ if(d.action==='miniSwap'){
+   if(!mini||mini.kind!=='match3')return;
+   const [x,y]=d.id.split(',').map(Number);
+   if(!mini.sel){mini.sel={x,y};miniModal();return;}
+   const r=MG.swapCells(mini.board,mini.sel,{x,y});
+   mini.sel=null;
+   if(r.ok){
+     MG.resolveMatches(mini.board);
+     if(!MG.hasMove(mini.board)&&mini.board.turns>0)MG.shuffleBoard(mini.board);
+     if(mini.board.score>=mini.board.target){miniWin();return;}
+     if(mini.board.turns<=0){toast('Ходы закончились. Можно повторить или оплатить бригаду.');}
+   } else if(r.reason){toast(r.reason);}
+   miniModal();
+   return;
+ }
+ if(d.action==='miniFlip'){MG.flipMemory(mini.board,Number(d.id));setTimeout(miniModal,50);return;}
+ if(d.action==='miniSign'){MG.toggleCalcSign(mini.board,Number(d.id));miniModal();return;}
+ if(d.action==='miniPour'){MG.pourSort(mini.board,0,d.id);miniModal();return;}
+ if(d.action==='miniCheck'){
+   const b=mini.board,k=mini.kind;
+   const win = k==='pipes'?MG.pipesSolved(b):k==='wires'?MG.wiresSolved(b):k==='match3'?b.score>=b.target:k==='memory'?b.cards.every(c=>c.done):k==='calc'?MG.calcValue(b)===b.target:k==='sort'?Object.values(b.cups).every(c=>c.length===3&&new Set(c).size===1):MG.answerRiddle(b,document.getElementById('riddleInput')?.value||'');
+   if(win)miniWin();else toast('Пока не решено. Попробуйте ещё или оплатите бригаду.');
+   return;
+ }
+ if(d.action==='miniPay'){
+   if(model.game.money<2500){toast('Не хватает средств.');return;}
+   model.game.money-=2500;model.game.ledger.expenses+=2500;
+   const cb=mini?.onWin;                 // забираем обработчик ДО закрытия окна
+   const b=document.getElementById('dialogueBox'); if(b)b.style.display='none';
+   mini=null;
+   if(cb)cb();
+   save();
+   if(window.__lastActionError)toast(window.__lastActionError.code+': '+window.__lastActionError.message);
+   toast('Бригада сделала работу за вас.');
+   return;
+ }
+ if(d.action==='acceptApplicant'){doAction({type:'acceptApplicant',applicantId:d.id});return;}
+ if(d.action==='declineApplicant'){doAction({type:'declineApplicant',applicantId:d.id});return;}
  if(d.action==='newsMenu'){
    const news=(model.game.news||[]);
    model.newsRead=news.length;save();
    const box=document.getElementById('dialogueBox')||(()=>{const b=document.createElement('div');b.id='dialogueBox';b.className='dialogue-overlay';document.body.appendChild(b);return b;})();
    box.innerHTML=`<div class="dialogue-panel"><div class="dialogue-main">
     <div class="kicker">Городские новости</div>
-    <div class="dialogue-text news-list">${news.length?news.slice(0,40).map(n=>`<div class="news-item"><span class="news-day">День ${n.day}</span><p>${E(n.text)}</p></div>`).join(''):'<p>Пока новостей нет.</p>'}</div>
+    <div class="dialogue-text news-list">${news.length?news.slice(0,40).map((n,idx)=>{
+     const t=n.text||'';
+     let act='',label='';
+     if(t.includes('желающие заселиться')||t.includes('заявки')){act='people';label='К заявкам';}
+     else if(t.includes('Приехала')||t.includes('Заселилась')||t.includes('Приглашены')){act='city';label='На главную';}
+     else if(t.includes('заработано')||t.includes('содержание города')){act='build';label='К работам';}
+     else if(t.includes('не может работать')||t.includes('помощь')){act='people';label='К людям';}
+     return `<div class="news-item ${label?'news-click':''}" ${label?`data-action="newsGo" data-id="${act}"`:''}><span class="news-day">День ${n.day}${label?' · нажмите':''}</span><p>${E(t)}</p></div>`;
+   }).join(''):'<p>Пока новостей нет.</p>'}</div>
     <div class="dialogue-choices">${button('Закрыть','closeNews','',true)}</div></div></div>`;
    box.style.display='flex';
    render(true);
    return;
  }
+ if(d.action==='newsGo'){window.__tabSet=(window.__tabSet||0)+1;const b=document.getElementById('dialogueBox');if(b)b.style.display='none';tab=d.id;doRender();window.scrollTo(0,0);return;}
  if(d.action==='closeNews'){const b=document.getElementById('dialogueBox');if(b)b.style.display='none';save();render(true);return;}
  if(d.action==='resetMenu'){
    if(confirm('Начать заново?\n\nВесь прогресс города будет удалён. Это действие нельзя отменить.')){
@@ -1781,10 +2327,25 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-acti
  }
  if(d.action==='reset'){if(confirm('Удалить прогресс этой версии и начать заново?')){model={version:1,game:newGame(),name:'Новая Надежда',scene:0,started:false,history:[],dialogueFlags:[],completedConversations:[],personalRelations:{anatoly:50}};save();render()}return}
  const actions={repairService:()=>({type:'repairService',service:d.id}),dialogue:()=>({type:'dialogue',characterId:d.id,choice:d.choice}),repair:()=>({type:'repair',houseId:d.house,entrance:Number(d.entrance),step:d.step}),settle:()=>({type:'settle',houseId:d.house,entrance:Number(d.entrance)}),infrastructure:()=>({type:'infrastructure',service:d.id}),newHouse:()=>({type:'buildHouse'}),wait:()=>({type:'wait',days:Number(d.days)}),help:()=>({type:'help',characterId:d.id,choice:d.choice}),event:()=>({type:'event',eventId:d.id,choice:d.choice})};
+ if(d.action==='repair'&&d.step==='clear'){
+   const act_={type:'repair',houseId:d.house,entrance:Number(d.entrance),step:d.step};
+   miniOpen('match3',()=>doAction(act_));
+   return;
+ }
+ if(d.action==='repair'&&d.step==='connect'){
+   const act_={type:'repair',houseId:d.house,entrance:Number(d.entrance),step:d.step};
+   const svc=d.id==='water'?'pipes':'wires';
+   miniOpen(svc,()=>doAction(act_));
+   return;
+ }
+ if(d.action==='repair'){doAction({type:'repair',houseId:d.house,entrance:Number(d.entrance),step:d.step});return;}
+ if(d.action==='infrastructure'){busyOverlay('Бригада выходит на объект…',1500).then(()=>doAction({type:'infrastructure',service:d.id}));return;}
+ if(d.action==='newHouse'){busyOverlay('Закладываем фундамент…',1800).then(()=>doAction({type:'buildHouse'}));return;}
  if(actions[d.action])doAction(actions[d.action]());
 });
 document.getElementById('closeModal').onclick=()=>document.getElementById('modal').close();
 document.addEventListener('error',e=>{if(e.target instanceof HTMLImageElement){e.target.hidden=true;}},true);
 try{window.Telegram?.WebApp?.ready();window.Telegram?.WebApp?.expand()}catch{}
 render();
-</script></body></html>
+
+const MG={newPipes,newWires,newMatch3,newMemory,newCalc,newSort,newRiddle,rotatePipe,addWirePoint,swapCells,resolveMatches,flipMemory,toggleCalcSign,pourSort,answerRiddle,pipesSolved,wiresSolved,calcValue};</script></body></html>
