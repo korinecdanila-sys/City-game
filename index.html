@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101b23"><title>Год до рассвета</title><style>:root{color-scheme:dark;--bg:#101b23;--panel:#1c2b35;--line:#344853;--gold:#edbd79;--text:#eef1ed;--muted:#a6b9c1;--green:#9bd5b6}*{box-sizing:border-box}body{margin:0;background:#081219;color:var(--text);font:15px/1.55 system-ui,sans-serif}button,input{font:inherit}button{touch-action:manipulation;cursor:pointer;border:1px solid var(--line);border-radius:13px;background:#263b47;color:var(--text);padding:13px 16px}button:disabled{opacity:.48;cursor:not-allowed}button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:3px}.primary{background:var(--gold);color:#262018;border-color:var(--gold);font-weight:750}.full{width:100%}h1,h2,h3,p{margin:0 0 12px}h1,h2{font-family:Georgia,serif}h1{font-size:32px}h2{font-size:25px}h3{font-size:17px}small,.muted{color:var(--muted)}small{font-size:12px}#app{max-width:820px;margin:auto;min-height:100dvh;background:var(--bg)}header{padding:20px 18px 14px;border-bottom:1px solid var(--line)}main{padding:18px 18px calc(115px + env(safe-area-inset-bottom))}.brand{display:flex;justify-content:space-between;gap:10px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:16px}.stat{padding:10px 4px;background:#21323d;text-align:center;border-radius:11px}.stat small{display:block;font-size:10px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;margin:0 0 14px}.adviser{border-color:#617b65;background:linear-gradient(130deg,#2d4237,#192e3b)}.kicker{color:var(--gold);font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}.city-art{margin:0 0 16px;border-radius:19px;overflow:hidden;background:#243c43;position:relative;min-height:130px}.city-art img{width:100%;display:block}.city-art figcaption{position:absolute;bottom:0;left:0;right:0;padding:30px 16px 14px;background:linear-gradient(transparent,#07131de6);font-size:10px;letter-spacing:2px}.portrait{width:80px;height:100px;object-fit:contain;border-radius:12px;background:#000;float:left;margin:0 14px 10px 0}.dialogue{clear:both}.choice{width:100%;display:block;text-align:left;margin-top:10px}.choice strong,.choice small{display:block}.choice small{margin-top:5px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.badge{font-size:11px;color:var(--green);padding:4px 9px;background:#30483c;border-radius:20px}.danger{border-color:#a86e5e}.track{height:7px;background:#0e1922;border-radius:10px;overflow:hidden;margin:12px 0}.track span{display:block;height:100%;background:var(--green)}nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:820px;width:100%;display:flex;background:#10232ef5;border-top:1px solid var(--line);backdrop-filter:blur(16px);padding:9px 4px calc(9px + env(safe-area-inset-bottom));z-index:10}nav button{flex:1;border:0;border-radius:8px;background:none;font-size:10px;padding:8px 2px;color:var(--muted)}nav button.active{color:var(--gold);background:#ffffff08}nav span{display:block;font-size:20px}input{width:100%;padding:13px;background:#101d27;color:white;border:1px solid #526b79;border-radius:11px;margin:8px 0 12px}blockquote{border-left:3px solid var(--gold);margin:14px 0;padding:7px 16px;color:#d9e4da}.log{padding:12px 0;border-bottom:1px solid var(--line)}#toast{position:fixed;top:15px;left:50%;transform:translateX(-50%);background:#294735;border:1px solid #7eaa89;padding:13px 17px;width:min(92%,600px);border-radius:13px;z-index:50}dialog{background:var(--panel);color:var(--text);max-width:520px;width:calc(100% - 24px);max-height:85dvh;overflow:auto;border:1px solid #718c95;border-radius:18px;padding:23px}dialog::backdrop{background:#000b}.story-card{padding:24px}.clear{clear:both}[hidden]{display:none!important}@media(max-width:380px){.grid{grid-template-columns:1fr}main{padding:12px 12px 110px}.stat{font-size:12px}}
+</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head><body><div id="app"></div><div id="toast" role="status" hidden></div><dialog id="modal"><div id="modalContent"></div><button id="closeModal">Закрыть</button></dialog><noscript>Для игры нужен JavaScript.</noscript><script type="module">const E=(...args)=>escapeHTML(...args);
+// Standalone deterministic game rules. All currency is fictional; no I/O or payments.
+const SAVE_VERSION = 2;
+const SERVICES = Object.freeze(['power', 'water', 'heat', 'sewer', 'supply']);
+const PEOPLE = ['engineer', 'doctor', 'organizer'];
+const WEEK = 7 * 86400000;
+const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+const FUELS = [.5, .3, .5, 1];
+const clone = value => structuredClone(value);
+const integer = (n, min = 0, max = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(n) && n >= min && n <= max;
+const obj = x => x !== null && typeof x === 'object' && !Array.isArray(x);
+function requireRule(condition, code, message) {
+  if (!condition) throw Object.assign(new Error(message), {code});
+}
+function timestamp(now) { requireRule(integer(now, 0, 8640000000000000), 'INVALID_TIME', 'now должен быть временем Unix в миллисекундах.'); }
+const entrance = () => ({stage: 0, residents: 0});
+function makeHouseholds(houseId, entrance, residents) {
+  const families = [];
+  for (let n = 0, remaining = residents; remaining > 0; n++) {
+    const size = Math.min(1 + ((n + entrance + Number(houseId.slice(1)) - 1) % 5), remaining);
+    const children = Math.max(0, size - 2);
+    const workers = size - children;
+    families.push({id: `${houseId}-e${entrance}-f${n + 1}`, houseId, entrance, size, workers, children});
+    remaining -= size;
+  }
+  return families;
+}
+function newGame(now = Date.now()) {
+  timestamp(now);
+  return {
+    version: SAVE_VERSION, startedAt: now, lastNow: now, day: 0, money: 200000,
+    population: 0, target: 10000, status: 'playing', firstArrivalClaimed: false,
+    households: [], nextHouseId: 2, houses: [{id: 'h1', entrances: Array.from({length: 4}, entrance)}],
+    infrastructure: Object.fromEntries(SERVICES.map(k => [k, {level: 0, capacity: 0, staff: 0, damaged: false}])),
+    characters: Object.fromEntries(PEOPLE.map((k, i) => [k, {name: ['Илья Белов', 'Дарья Ким', 'Марина Белова'][i], relation: 50, health: 'healthy', dueDay: null, refused: false, dialogueDone: false}])),
+    events: [], claimedMilestones: [], disruption: false, ledger: {income: 0, expenses: 0},
+  };
+}
+/** Structural and cross-field validation, not authentication: local saves are user-editable. */
+function validateSave(s) {
+  try {
+    requireRule(obj(s) && s.version === SAVE_VERSION, 'SAVE_VERSION', 'Неподдерживаемая версия сохранения.');
+    timestamp(s.startedAt); timestamp(s.lastNow);
+    requireRule(s.lastNow >= s.startedAt && integer(s.day, 0, 365) && integer(s.money) && integer(s.population, 0, 10000) && s.target === 10000 && ['playing', 'won', 'lost'].includes(s.status), 'INVALID_SAVE', 'Неверные основные поля сохранения.');
+    requireRule(typeof s.firstArrivalClaimed === 'boolean' && typeof s.disruption === 'boolean' && integer(s.nextHouseId, 2, 81), 'INVALID_SAVE', 'Неверные флаги сохранения.');
+    requireRule(Array.isArray(s.houses) && s.houses.length >= 1 && s.houses.length <= 80 && s.nextHouseId === s.houses.length + 1, 'INVALID_SAVE', 'Неверный список домов.');
+    let population = 0;
+    s.houses.forEach((h, i) => {
+      requireRule(obj(h) && h.id === `h${i + 1}` && Array.isArray(h.entrances) && h.entrances.length === 4, 'INVALID_SAVE', 'Неверный дом.');
+      for (const e of h.entrances) {
+        requireRule(obj(e) && integer(e.stage, 0, 3) && integer(e.residents, 0, 130) && (e.residents === 0 || e.stage === 3), 'INVALID_SAVE', 'Неверный подъезд.');
+        population += e.residents;
+      }
+    });
+    requireRule(population === s.population && s.firstArrivalClaimed === (population > 0), 'INVALID_SAVE', 'Население не соответствует домам.');
+    requireRule(Array.isArray(s.households) && s.households.length <= 10000, 'INVALID_SAVE', 'Неверный список семей.');
+    const familyIds = new Set(), perEntrance = new Map();
+    let familyPopulation = 0;
+    for (const f of s.households) {
+      requireRule(obj(f) && Object.keys(f).length === 6 && ['id', 'houseId', 'entrance', 'size', 'workers', 'children'].every(k => Object.hasOwn(f, k)), 'INVALID_SAVE', 'Неверная структура семьи.');
+      const h = s.houses.find(h => h.id === f.houseId);
+      requireRule(h && integer(f.entrance, 0, 3) && integer(f.size, 1, 5) && integer(f.workers, 1, Math.min(2, f.size)) && integer(f.children, 0, Math.min(3, f.size - 1)) && f.workers + f.children === f.size, 'INVALID_SAVE', 'Неверный состав или адрес семьи.');
+      requireRule(typeof f.id === 'string' && new RegExp(`^${f.houseId}-e${f.entrance}-f[1-9][0-9]*$`).test(f.id) && !familyIds.has(f.id), 'INVALID_SAVE', 'Неверный или повторный идентификатор семьи.');
+      familyIds.add(f.id); familyPopulation += f.size;
+      const key = `${f.houseId}:${f.entrance}`;
+      perEntrance.set(key, (perEntrance.get(key) || 0) + f.size);
+    }
+    requireRule(familyPopulation === s.population, 'INVALID_SAVE', 'Сумма семей не совпадает с населением.');
+    for (const h of s.houses) h.entrances.forEach((e, i) => requireRule((perEntrance.get(`${h.id}:${i}`) || 0) === e.residents, 'INVALID_SAVE', 'Семьи не совпадают с населением подъезда.'));
+    requireRule(obj(s.infrastructure), 'INVALID_SAVE', 'Нет инфраструктуры.');
+    for (const key of SERVICES) {
+      const v = s.infrastructure[key];
+      requireRule(obj(v) && integer(v.level, 0, 10) && v.capacity === v.level * 1040 && v.staff === v.level * 3 && typeof v.damaged === 'boolean' && v.capacity >= population, 'INVALID_SAVE', 'Неверная инфраструктура.');
+    }
+    requireRule(obj(s.characters), 'INVALID_SAVE', 'Нет персонажей.');
+    for (const key of PEOPLE) {
+      const p = s.characters[key];
+      requireRule(obj(p) && typeof p.name === 'string' && integer(p.relation, 0, 100) && ['healthy', 'injured', 'critical', 'dead'].includes(p.health) && typeof p.refused === 'boolean' && typeof p.dialogueDone === 'boolean', 'INVALID_SAVE', 'Неверный персонаж.');
+      requireRule(['injured', 'critical'].includes(p.health) ? integer(p.dueDay, s.day + 1, 371) : p.dueDay === null, 'INVALID_SAVE', 'Неверный срок лечения.');
+    }
+    requireRule(Array.isArray(s.events) && s.events.length <= 11 && new Set(s.events.map(e => e?.id)).size === s.events.length, 'INVALID_SAVE', 'Неверные события.');
+    for (const e of s.events) {
+      const choices = eventChoices[e?.kind];
+      requireRule(obj(e) && choices && typeof e.id === 'string' && typeof e.title === 'string' && integer(e.day, 0, s.day) && typeof e.resolved === 'boolean' && (e.resolved ? choices.includes(e.choice) : e.choice === null), 'INVALID_SAVE', 'Неверное событие.');
+      requireRule(e.kind === 'restoration' ? /^restoration-[1-9]$/.test(e.id) : e.id === e.kind, 'INVALID_SAVE', 'Неверный идентификатор события.');
+    }
+    requireRule(Array.isArray(s.claimedMilestones) && new Set(s.claimedMilestones).size === s.claimedMilestones.length && s.claimedMilestones.every(n => integer(n, 1, 9) && n * 1040 <= population), 'INVALID_SAVE', 'Неверные этапы восстановления.');
+    for (let n = 1; n <= Math.floor(population / 1040); n++) requireRule(s.claimedMilestones.includes(n) && s.events.some(e => e.id === `restoration-${n}`), 'INVALID_SAVE', 'Отсутствует этап восстановления.');
+    requireRule(s.events.filter(e => e.kind === 'restoration').length === s.claimedMilestones.length, 'INVALID_SAVE', 'Несогласованные награды.');
+    requireRule(obj(s.ledger) && integer(s.ledger.income) && integer(s.ledger.expenses) && s.money === 200000 + s.ledger.income - s.ledger.expenses, 'INVALID_SAVE', 'Неверный баланс.');
+    requireRule((s.status === 'won') === (population === 10000) && (s.status !== 'playing' || s.day < 365), 'INVALID_SAVE', 'Неверный результат игры.');
+    return {ok: true, error: null};
+  } catch (e) { return {ok: false, error: {code: e.code || 'INVALID_SAVE', message: e.message}}; }
+}
+/** Explicit, immutable migration. Never grants money or replays settlement. */
+function migrateSave(value) {
+  try {
+    requireRule(obj(value) && [1, SAVE_VERSION].includes(value.version), 'SAVE_VERSION', 'Неподдерживаемая версия сохранения.');
+    const state = clone(value);
+    if (state.version === 1) {
+      requireRule(!Object.hasOwn(state, 'households'), 'INVALID_SAVE', 'У старого сохранения неожиданное поле households.');
+      state.version = SAVE_VERSION;
+      state.households = [];
+      requireRule(Array.isArray(state.houses), 'INVALID_SAVE', 'Неверные дома старого сохранения.');
+      for (const h of state.houses) {
+        requireRule(obj(h) && /^h[1-9][0-9]*$/.test(h.id) && Array.isArray(h.entrances), 'INVALID_SAVE', 'Неверный дом старого сохранения.');
+        h.entrances.forEach((e, i) => {
+          requireRule(obj(e) && integer(e.residents, 0, 130), 'INVALID_SAVE', 'Неверное население старого сохранения.');
+          state.households.push(...makeHouseholds(h.id, i, e.residents));
+        });
+      }
+    }
+    const check = validateSave(state);
+    requireRule(check.ok, check.error?.code, check.error?.message);
+    return {ok: true, state, error: null};
+  } catch (e) { return {ok: false, state: value, error: {code: e.code || 'INVALID_SAVE', message: e.message}}; }
+}
+const eventChoices = {threat: ['secure', 'pay', 'ignore'], election: ['community', 'austerity'], restoration: ['claim']};
+function season(state, now = Date.now()) {
+  timestamp(now); timestamp(state?.startedAt);
+  requireRule(now >= state.startedAt, 'INVALID_TIME', 'Время раньше начала игры.');
+  const cycle = Math.floor((now - state.startedAt) / WEEK);
+  const index = cycle % 4;
+  return {index, name: SEASONS[index], fuelMultiplier: FUELS[index], startsAt: state.startedAt + cycle * WEEK, endsAt: state.startedAt + (cycle + 1) * WEEK};
+}
+function spend(s, amount) {
+  requireRule(s.money >= amount, 'INSUFFICIENT_FUNDS', 'Недостаточно игровых средств.');
+  s.money -= amount; s.ledger.expenses += amount;
+}
+function earn(s, amount) { s.money += amount; s.ledger.income += amount; }
+function relations(s, delta) { for (const p of Object.values(s.characters)) if (p.health !== 'dead') p.relation = Math.max(0, Math.min(100, p.relation + delta)); }
+function addEvent(s, id, kind, title, effects) {
+  if (!s.events.some(e => e.id === id)) { s.events.push({id, kind, title, day: s.day, resolved: false, choice: null}); effects.push(`Новое событие: ${title}`); }
+}
+function tick(s, days, now, effects) {
+  for (let i = 0; i < days && s.status === 'playing'; i++) {
+    s.day++;
+    const expense = Math.ceil(SERVICES.reduce((total, k) => total + s.infrastructure[k].level * (120 + (k === 'heat' ? 30 * season(s, now).fuelMultiplier : 30)), 0)) + (s.disruption ? 100 : 0) + s.houses.reduce((sum, h) => sum + h.entrances.filter(e => e.stage === 3 && e.residents === 0).length * 10, 0);
+    earn(s, s.population * 4);
+    if (s.money < expense) { spend(s, s.money); s.status = 'lost'; effects.push('Банкротство: не удалось оплатить ежедневные расходы.'); }
+    else spend(s, expense);
+    for (const p of Object.values(s.characters)) if (p.dueDay !== null && s.day >= p.dueDay) {
+      if (p.health === 'injured') { p.health = 'critical'; p.dueDay = s.day + 3; effects.push(`${p.name}: критическое состояние.`); }
+      else { p.health = 'dead'; p.dueDay = null; effects.push(`${p.name}: погиб без помощи.`); relations(s, -10); }
+    }
+    if (s.day === 7) addEvent(s, 'threat', 'threat', 'Угроза мародёрства', effects);
+    if (s.day === 30) addEvent(s, 'election', 'election', 'Выборы городского совета', effects);
+    if (s.day >= 365) { s.status = 'lost'; effects.push('Год завершён: город не восстановлен.'); }
+  }
+}
+const FIELDS = {
+  buildHouse: ['type'], infrastructure: ['type', 'service'], repair: ['type', 'houseId', 'entrance', 'step'],
+  settle: ['type', 'houseId', 'entrance'], wait: ['type', 'days'], help: ['type', 'characterId', 'choice'], event: ['type', 'eventId', 'choice'],
+  repairService: ['type', 'service'], dialogue: ['type', 'characterId', 'choice'],
+};
+function act(state, action, now = Date.now()) {
+  try {
+    const valid = validateSave(state);
+    requireRule(valid.ok, valid.error?.code, valid.error?.message);
+    timestamp(now); requireRule(now >= state.lastNow, 'INVALID_TIME', 'Время не может идти назад.');
+    requireRule(state.status === 'playing', 'GAME_OVER', 'Игра уже завершена.');
+    const fields = obj(action) && Object.hasOwn(FIELDS, action.type) && FIELDS[action.type];
+    requireRule(fields && Object.keys(action).length === fields.length && fields.every(k => Object.hasOwn(action, k)), 'INVALID_ACTION', 'Неизвестное действие или неверные поля.');
+    const s = clone(state), effects = [];
+    s.lastNow = now;
+    if (action.type === 'buildHouse') {
+      requireRule(s.houses.length < 80, 'LIMIT', 'Достигнут предел домов.');
+      spend(s, 12000); s.houses.push({id: `h${s.nextHouseId++}`, entrances: Array.from({length: 4}, entrance)});
+      effects.push('Заложен новый дом: четыре подъезда по 130 жителей.');
+    } else if (action.type === 'infrastructure') {
+      requireRule(SERVICES.includes(action.service), 'INVALID_ACTION', 'Неизвестная инфраструктура.');
+      const v = s.infrastructure[action.service];
+      requireRule(v.level < 10, 'LIMIT', 'Мощность уже максимальна.');
+      spend(s, 20000); v.level++; v.capacity += 1040; v.staff += 3;
+      effects.push(`${action.service}: мощность +1040, персонал +3.`);
+    } else if (action.type === 'repair' || action.type === 'settle') {
+      const house = s.houses.find(h => h.id === action.houseId);
+      requireRule(house && integer(action.entrance, 0, 3), 'INVALID_ACTION', 'Дом или подъезд не найден.');
+      const e = house.entrances[action.entrance];
+      if (action.type === 'repair') {
+        const stage = ['clear', 'repair', 'connect'].indexOf(action.step);
+        requireRule(stage >= 0 && e.stage === stage, 'INVALID_STAGE', 'Нарушен порядок ремонта или этап уже завершён.');
+        spend(s, [1500, 8000, 1500][stage]); e.stage++; effects.push('Этап ремонта завершён.');
+      } else {
+        requireRule(e.stage === 3 && e.residents === 0, 'INVALID_STAGE', 'Нужен готовый незаселённый подъезд.');
+        const count = Math.min(130, s.target - s.population);
+        requireRule(SERVICES.every(k => !s.infrastructure[k].damaged && s.infrastructure[k].capacity >= s.population + count), 'CAPACITY', 'Недостаточная мощность инфраструктуры.');
+        e.residents = count; s.population += count;
+        s.households.push(...makeHouseholds(house.id, action.entrance, count));
+        const grant = s.firstArrivalClaimed ? 12000 : 20000;
+        earn(s, grant); s.firstArrivalClaimed = true;
+        effects.push(`Заселено ${count} жителей; одноразовая муниципальная субсидия ${grant}.`);
+        for (let n = 1; n <= Math.floor(s.population / 1040); n++) if (!s.claimedMilestones.includes(n)) {
+          s.claimedMilestones.push(n); addEvent(s, `restoration-${n}`, 'restoration', `Восстановлен квартал ${n}`, effects);
+        }
+        if (s.population === s.target) { s.status = 'won'; effects.push('Победа: 10 000 жителей вернулись домой!'); }
+      }
+    } else if (action.type === 'repairService') {
+      requireRule(SERVICES.includes(action.service), 'INVALID_ACTION', 'Неизвестная инфраструктура.');
+      const v = s.infrastructure[action.service];
+      requireRule(v.damaged, 'INVALID_STAGE', 'Служба не повреждена.');
+      spend(s, 3000); v.damaged = false;
+      s.disruption = SERVICES.some(k => s.infrastructure[k].damaged);
+      effects.push('Авария устранена, заселение снова доступно.');
+    } else if (action.type === 'dialogue') {
+      requireRule(PEOPLE.includes(action.characterId) && ['listen', 'dismiss'].includes(action.choice), 'INVALID_ACTION', 'Неверный диалог.');
+      const p = s.characters[action.characterId];
+      requireRule(p.health !== 'dead', 'INVALID_HEALTH', 'Персонаж погиб.');
+      requireRule(!p.dialogueDone, 'ALREADY_RESOLVED', 'Этот разговор уже завершён.');
+      p.dialogueDone = true;
+      p.relation = Math.max(0, Math.min(100, p.relation + (action.choice === 'listen' ? 5 : -10)));
+      tick(s, 1, now, effects);
+      effects.push(action.choice === 'listen' ? 'Вы выслушали персонажа: отношения улучшились.' : 'Резкий отказ ухудшил отношения.');
+    } else if (action.type === 'wait') {
+      requireRule(integer(action.days, 1, 30), 'INVALID_ACTION', 'Ожидание: от 1 до 30 игровых суток.');
+      tick(s, action.days, now, effects);
+    } else if (action.type === 'help') {
+      requireRule(PEOPLE.includes(action.characterId) && ['free', 'medical', 'refuse'].includes(action.choice), 'INVALID_ACTION', 'Неверный выбор помощи.');
+      const p = s.characters[action.characterId];
+      requireRule(['injured', 'critical'].includes(p.health), 'INVALID_HEALTH', 'Помощь доступна только раненым и критическим персонажам.');
+      if (action.choice === 'refuse') {
+        requireRule(!p.refused, 'ALREADY_RESOLVED', 'Отказ уже учтён.');
+        p.refused = true; p.relation = Math.max(0, p.relation - 20); p.dueDay = Math.min(p.dueDay, s.day + 1);
+        effects.push('Отказ ухудшил отношения и ускорил ухудшение здоровья.');
+      } else {
+        if (action.choice === 'medical') spend(s, 2000);
+        p.health = 'healthy'; p.dueDay = null; p.refused = false; p.relation = Math.min(100, p.relation + 10);
+        if (action.choice === 'free') tick(s, 1, now, effects);
+        effects.push('Персонаж спасён.');
+      }
+    } else if (action.type === 'event') {
+      const e = s.events.find(e => e.id === action.eventId);
+      requireRule(e && !e.resolved, 'ALREADY_RESOLVED', 'Событие отсутствует или уже завершено.');
+      requireRule(eventChoices[e.kind].includes(action.choice), 'INVALID_ACTION', 'Неверный выбор события.');
+      e.resolved = true; e.choice = action.choice;
+      if (e.kind === 'threat') {
+        if (action.choice === 'pay') spend(s, 5000);
+        else if (action.choice === 'secure') tick(s, 1, now, effects);
+        else { s.disruption = true; s.infrastructure.power.damaged = true; relations(s, -10);
+          const p = s.characters.engineer;
+          if (p.health === 'healthy') { p.health = 'injured'; p.dueDay = s.day + 3; p.refused = false; }
+          effects.push('Авария электросети: новое заселение остановлено до ремонта. Инженер ранен; через 3 суток состояние станет критическим без помощи. Бесплатная помощь доступна.'); }
+      } else if (e.kind === 'election') {
+        earn(s, action.choice === 'community' ? 25000 : 40000); relations(s, action.choice === 'community' ? 5 : -15);
+      } else earn(s, 20000);
+      effects.push(`Событие завершено: ${e.title}.`);
+    }
+    const check = validateSave(s);
+    requireRule(check.ok, 'INTERNAL_ERROR', check.error?.message);
+    return {ok: true, state: s, effects, error: null};
+  } catch (e) {
+    return {ok: false, state, effects: [], error: {code: e.code || 'INVALID_ACTION', message: e.message}};
+  }
+}
+
+// Самостоятельные сюжетные данные. Не содержат UI, таймеров или игрового движка.
+// STORY и EVENTS — массивы. next: id следующей сцены/события либо null (выход из цепочки).
+// effects: числовые значения — изменения ресурсов; flags — устанавливаемые сюжетные флаги.
+// requires, unlocks, deadline и consequences — декларативные условия и последствия для интеграции.
+// Деньги указаны в USD. Численность учитывает постоянных жителей, не заявки и не посетителей.
+
+const CHARACTERS = [
+  { id: 'hero', name: 'Алексей Морозов', age: 41, role: 'Главный герой, бывший руководитель стройки', background: 'Руководил строительством жилого квартала. После банкротства подрядчика распродал долю в компании, рассчитался с бригадой и остался без работы. Умеет составлять графики, но ещё не управлял городом.', values: ['Договорённости важнее красивых отчётов', 'Люди вправе отказаться от риска', 'Хочет снова отвечать за собственное дело'] },
+  { id: 'viktor', name: 'Виктор Северин', age: 58, role: 'Предприниматель, предложивший пари', background: 'Покупает промышленное имущество на торгах. Встречает Алексея на распродаже оборудования разорившегося подрядчика. Происхождение его интереса к заброшенному городу до финала не раскрыто.', values: ['Измеримый результат', 'Точное исполнение договора', 'Не любит просить о доверии'] },
+  { id: 'anatoly', name: 'Анатолий Лукич Зорин', age: 78, role: 'Бывший начальник котельной', background: 'Остался сторожить ведомственный дом после закрытия предприятия двадцать лет назад. Живёт в одной сухой комнате, хранит схемы теплотрассы и письма уехавшей семьи. Не знает состояния всех подземных труб.', values: ['Не обещать тепло до опрессовки', 'Право остаться дома', 'Не быть музейным экспонатом'] },
+  { id: 'vera', name: 'Вера Соколова', age: 39, role: 'Независимый юрист', background: 'Проверяет титул собственности, обременения и приложение к пари. Работает за фиксированный гонорар, не получает процент от выигрыша. Отдельно защищает права будущих жильцов.', values: ['Информированное согласие', 'Право на обжалование', 'Письменные обязательства'] },
+  { id: 'marina', name: 'Марина Белова', age: 36, role: 'Представитель семей из общежития', background: 'Диспетчер грузового терминала, мать двоих детей. В аварийном общежитии помогает 130 соседям вести общий список нужд. Не может принять решение о переезде за всех.', values: ['Стабильный дом', 'Понятные расходы', 'У семей должен быть голос'] },
+  { id: 'ilya', name: 'Илья Белов', age: 38, role: 'Электромонтёр, супруг Марины', background: 'Работает вахтами. Готов монтировать сеть, но опасается, что новая стройка снова оставит его детей без отца на месяцы. Не согласен работать бесплатно за обещание жилья.', values: ['Оплаченный труд', 'Семейное время', 'Электробезопасность'] },
+  { id: 'darya', name: 'Дарья Ким', age: 34, role: 'Врач общей практики', background: 'Приезжает с мужем и семилетней дочерью. Может открыть амбулаторию, но не заменить скорую помощь и стационар. Требует договор с действующей больницей за пределами города.', values: ['Честно говорить о пределах помощи', 'Доступность лечения', 'Конфиденциальность'] },
+  { id: 'pavel', name: 'Павел Ершов', age: 46, role: 'Инженер водоснабжения', background: 'После сокращения ищет постоянную работу рядом с семьёй. Исследует старые скважины и сразу предупреждает, что прозрачная вода не обязательно безопасна.', values: ['Лабораторные данные', 'Ремонтопригодность', 'Не прятать плохие результаты'] },
+  { id: 'svetlana', name: 'Светлана Руденко', age: 44, role: 'Учительница и будущая директор школы', background: 'Переезжает с матерью и подростком. Собирает учителей, организует временные занятия, спорит с родителями о сменах и доступности школы для детей с инвалидностью.', values: ['Непрерывность образования', 'Не делить детей на выгодных и неудобных', 'Уважение к труду учителей'] },
+  { id: 'timur', name: 'Тимур Хасанов', age: 32, role: 'Прораб ремонтной бригады', background: 'Работал у Алексея и помнит как вовремя выплаченную зарплату, так и срывы графика. Приезжает с женой-бухгалтером и маленьким сыном. Не хочет повторения старого банкротства.', values: ['Зарплата по сроку', 'Право остановить опасную работу', 'Практические решения'] },
+  { id: 'elena', name: 'Елена Хасанова', age: 31, role: 'Бухгалтер городского кооператива', background: 'Вела учёт в небольшой торговой фирме. Создаёт открытый бюджет, отделяя личное пари Алексея от денег жителей. Спорит с мужем о приоритетах его бригады.', values: ['Проверяемые расходы', 'Резерв на зарплаты', 'Общие деньги не служат личным ставкам'] },
+  { id: 'roman', name: 'Роман Лисицин', age: 49, role: 'Владелец деревообрабатывающей мастерской', background: 'Ищет площадку для расширения и жильё для семей работников. Предлагает рабочие места, но просит дешёвую аренду и проезд грузовиков возле жилого квартала.', values: ['Предсказуемые правила', 'Прибыльное производство', 'Ответственность перед работниками'] },
+  { id: 'nina', name: 'Нина Воронцова', age: 67, role: 'Библиотекарь, хранительница местного архива', background: 'Уехала после закрытия комбината, теперь рассматривает возвращение вместе с взрослой дочерью. Восстанавливает историю города по свидетельствам, а не по рекламным легендам.', values: ['Память без украшательства', 'Доступные общественные пространства', 'Право не возвращаться'] },
+  { id: 'sergey', name: 'Сергей Баранов', age: 52, role: 'Водитель и координатор эвакуации', background: 'Водил междугородние автобусы. Поселился с женой, которая ухаживает за своей матерью. Договаривается о резервных рейсах, учитывает маломобильных пассажиров и домашних животных.', values: ['Никого не оставлять без транспорта', 'Трезвый расчёт вместимости', 'Эвакуация не услуга для богатых'] },
+  { id: 'alina', name: 'Алина Нестерова', age: 29, role: 'Журналистка районной газеты', background: 'Проверяет историю нового поселения и рассказы семей. Не обещает положительный материал за доступ к документам. Считает личное пари общественно значимым риском.', values: ['Проверка источников', 'Согласие на публикацию личного', 'Власть должна отвечать на вопросы'] },
+  { id: 'mikhail', name: 'Михаил Громов', age: 55, role: 'Инспектор по зданиям и пожарной безопасности', background: 'Принимает восстановленные дома по договору с независимой организацией. Знает, что затягивание приёмки тоже оставляет семьи в беде, но подпись под опасным зданием не ставит.', values: ['Одинаковые требования для всех', 'Документируемые замечания', 'Безопасность без показательных запретов'] },
+];
+
+const STORY = [
+  {
+    id: 'auction', title: 'Распродажа', speaker: 'Алексей Морозов',
+    text: 'В ангаре распродают имущество вашей бывшей стройки. На верстаке лежит лазерный уровень с номером вашей бригады. Вы пришли за инструментом, а не за воспоминаниями. Мужчина в сером пальто спрашивает: «Вы этот прибор проверяете так, будто сами им размечали этажи». «Размечали мои люди. Я отвечал, чтобы они получили деньги». Мужчина представляется Виктором Севериным.',
+    choices: [
+      { label: 'Рассказать, почему закрылась стройка', next: 'offer', effects: { flags: ['shared_failure'] }, consequences: 'Северин узнает о банкротстве и ваших обязательствах перед бригадой; разговор становится личнее.' },
+      { label: 'Спросить, что ему нужно, не обсуждая прошлое', next: 'offer', effects: { flags: ['kept_distance'] }, consequences: 'Вы сохраняете дистанцию; Северин переходит к делу без личных подробностей.' },
+    ],
+  },
+  {
+    id: 'offer', title: 'Не строительный подряд', speaker: 'Виктор Северин',
+    text: '«У меня есть город. Двадцать лет как заброшен. Нужен человек, который сумеет вернуть туда жизнь». Вы спрашиваете, почему он не нанял подрядчика. «Подрядчик сдаст метры. Мне нужны жители». На слове «пари» вы убираете визитку обратно на стол: «Сначала документы. И никаких подписей на капоте». Северин кивает: «Разумно».',
+    choices: [
+      { label: 'Попросить полный договор и независимого юриста', next: 'documents', effects: { flags: ['independent_review'] }, consequences: 'Вера получит весь пакет, включая санкции и приложения; Северину придётся ждать проверки.' },
+      { label: 'Сначала запросить выписки и технические архивы', next: 'documents', effects: { flags: ['technical_review_first'] }, consequences: 'Вы начнёте с собственности и состояния имущества; юридическую проверку это не отменяет.' },
+    ],
+  },
+  {
+    id: 'documents', title: 'Бумага выдержит не всё', speaker: 'Вера Соколова',
+    text: 'Два дня Вера сверяет выписки, границы, долги, право Северина распоряжаться зданиями и доступ к дороге. В приложениях объект пока обозначен кадастровым номером и кодом «Участок 17»: местное название вы не выясняете. Земля и здания принадлежат его компании; полномочий отменять строительные нормы у него нет. Архивные обследования устарели. «Право собственности подтверждено, — говорит Вера. — Безопасность домов — нет. И город в договоре означает имущественный комплекс, а не власть над людьми».',
+    choices: [
+      { label: 'Зафиксировать право публиковать условия и бюджет', next: 'terms', effects: { flags: ['public_contract'] }, consequences: 'В договор добавляют право раскрывать условия жителям; ваша личная ставка станет публичной.' },
+      { label: 'Зафиксировать независимую приёмку жилья', next: 'terms', effects: { flags: ['independent_inspections'] }, consequences: 'В приложение включают независимые акты заселения; это добавит расходы и защитит от давления сроков.' },
+    ],
+  },
+  {
+    id: 'terms', title: 'Цена года', speaker: 'Вера Соколова',
+    text: 'На столе последняя редакция. Северин предоставляет $200 000 стартового капитала на восстановление. За один год со дня подписания в городе должны постоянно жить 10 000 человек. Успех — $10 000 000 и передача городского имущественного комплекса вам с сохранением прав жильцов. Неудача — ваш личный долг $1 000 000 и предусмотренный договором снос, только после законных процедур, расселения и проверки обжалований. Регистрации на бумаге не считаются; проверка независимая. «Миллион долга не исчезнет от того, что вы очень старались», — говорит Вера.',
+    contract: { initialCapital: 200000, abandonedYears: 20, targetResidents: 10000, durationYears: 1, successPrize: 10000000, successProperty: 'Городской имущественный комплекс с действующими правами жильцов', failurePersonalDebt: 1000000, failureDemolition: true, demolitionRequires: ['Законная процедура', 'Предоставленное расселение', 'Рассмотрение обжалований'], residencyVerification: 'Фактическое постоянное проживание, независимый аудит' },
+    choices: [
+      { label: 'Включить бесплатную эвакуацию и резерв на выезд', next: 'signature', effects: { flags: ['evacuation_reserve_priority'] }, consequences: 'Обязательный бесплатный выезд фиксируется отдельно; резерв уменьшит свободные деньги на стройку.' },
+      { label: 'Включить независимого оператора эвакуации', next: 'signature', effects: { flags: ['external_evacuation_operator'] }, consequences: 'Бесплатный выезд обеспечивает перевозчик по договору; вы зависите от его графика и обязаны оплатить резерв.' },
+    ],
+  },
+  {
+    id: 'signature', title: 'Подпись без свидетелей чуда', speaker: 'Алексей Морозов',
+    text: 'Северин проверяет дату. «Год начинается сегодня. Вы понимаете, что это не обещание инвестировать ещё?» Вы понимаете. Вера отдельно подтверждает: будущие жители не отвечают по вашему долгу, бесплатная эвакуация не зависит от пожертвований, покупок или согласия остаться. На последней странице оставлено место для вашей подписи.',
+    choices: [
+      { label: 'Подписать и начать с небольшого пригодного квартала', next: 'arrival', effects: { money: 200000, flags: ['bet_signed', 'compact_start', 'free_evacuation_guaranteed'] }, consequences: 'Вы принимаете все условия пари, получаете $200 000 и выбираете ограниченный первый фронт работ.' },
+      { label: 'Подписать и обследовать сразу несколько кварталов', next: 'arrival', effects: { money: 200000, flags: ['bet_signed', 'broad_survey', 'free_evacuation_guaranteed'] }, consequences: 'Вы принимаете те же условия; широкий осмотр даст больше вариантов, но потребует больше времени специалистов.' },
+      { label: 'Не подписывать: личный долг слишком велик', next: null, effects: { flags: ['bet_declined', 'prologue_ended'] }, consequences: 'Пари не начинается, капитал не перечисляется, долга нет. Это самостоятельный отказ, а не поражение за неправильный ответ.' },
+    ],
+  },
+  {
+    id: 'arrival', title: 'Один огонёк', speaker: 'Алексей Морозов',
+    text: 'К городу вы добираетесь после темноты. Табличка на въезде сорвана, навигатор показывает номер дороги. За чёрными окнами одного дома дрожит огонёк. Не электричество — свеча на блюдце. На стук отвечает пожилой мужчина в шерстяном жилете: «Если за медью, опоздали. Если люди — заходите, на улице сыро». Вы называете себя, но пока не спрашиваете название города.',
+    choices: [
+      { label: 'Попросить разрешения погреться и поговорить', next: 'candle', effects: { flags: ['accepted_hospitality'] }, consequences: 'Первый разговор состоится в комнате хозяина; вы входите как гость, не как распорядитель.' },
+      { label: 'Принести фонарь и термос из машины', next: 'candle', effects: { flags: ['shared_supplies'] }, consequences: 'Вы делитесь запасами; мужчина принимает свет, но просит не убирать его свечу.' },
+    ],
+  },
+  {
+    id: 'candle', title: 'Анатолий, семьдесят восемь', speaker: 'Анатолий Зорин',
+    text: '«Анатолий Лукич. Семьдесят восемь. Был начальником котельной». На столе две чашки и хлеб в полотенце. Вы спрашиваете, как он переживает зимы. «Одну комнату грею. Сын зовёт, я иногда езжу. Только там у них вся жизнь без меня расписана». Анатолий не выглядит ни пророком, ни хранителем готового решения. Он устал и хочет знать, не придётся ли снова собирать вещи.',
+    choices: [
+      { label: 'Честно рассказать о пари и возможном сносе', next: 'night_talk', effects: { flags: ['anatoly_knows_bet'] }, consequences: 'Анатолий узнаёт риск сразу. Он не обязан поддерживать вас и утром потребует письменных гарантий.' },
+      { label: 'Сначала спросить о его доме и желании остаться', next: 'night_talk', effects: { flags: ['anatoly_heard_first'] }, consequences: 'Вы узнаете его личные нужды до обсуждения планов; условия пари всё равно предстоит раскрыть до каких-либо соглашений.' },
+    ],
+  },
+  {
+    id: 'night_talk', title: 'Не обещайте к празднику', speaker: 'Анатолий Зорин',
+    text: 'Вы показываете договор и объясняете риск, если не сделали этого раньше. «Десять тысяч? — Анатолий долго смотрит на свечу. — Тут не счётчик нужен. Тут детям ночью в туалет ходить, людям на работу вставать». Он достаёт схемы теплотрассы: «Этим двадцать лет. Где труба цела — не знаю. Не пишите потом, что я обещал». Вы договариваетесь выйти с рассветом. За окном слышно, как вода стучит по пустому водостоку.',
+    choices: [
+      { label: 'Предложить оплачиваемую работу консультантом без дежурств', next: 'morning', effects: { flags: ['anatoly_consultant_offer', 'anatoly_knows_bet'] }, consequences: 'Он подумает над ограниченной работой; возраст и здоровье не превращают его в бесплатную аварийную службу.' },
+      { label: 'Попросить только разрешение скопировать схемы', next: 'morning', effects: { flags: ['anatoly_private_resident', 'anatoly_knows_bet'] }, consequences: 'Он остаётся частным жителем и делится архивом без обязательства работать на ваш проект.' },
+    ],
+  },
+  {
+    id: 'morning', title: 'Утром у проходной', speaker: 'Анатолий Зорин',
+    text: 'На утреннем осмотре вы обходите лужу у заводской проходной. Под плющом видна мозаика: «Добро пожаловать в Светлогорье». Только теперь у места появляется имя. «Светлогорье, — повторяет Анатолий. — Не потому что всё светло было. Просто склон на восток». Видны школа, два жилых квартала и покосившаяся крыша старого дома культуры. На доске объявлений выцвело расписание кружков.',
+    choices: [
+      { label: 'Начать обход с домов и путей эвакуации', next: 'survey', effects: { flags: ['survey_housing_first', 'city_name_known'] }, consequences: 'Вы сначала определите безопасные маршруты и перспективы жилья; инженерные сети проверят следующим этапом.' },
+      { label: 'Начать со скважины, подстанции и котельной', next: 'survey', effects: { flags: ['survey_utilities_first', 'city_name_known'] }, consequences: 'Вы сначала оцените снабжение; жилые здания до отдельной проверки остаются закрытыми.' },
+    ],
+  },
+  {
+    id: 'survey', title: 'За цифрами — квартиры', speaker: 'Тимур Хасанов',
+    text: 'Через несколько дней приезжают Тимур и инспектор Михаил. У первого дома сухой подвал, но гнилая часть перекрытий. У второго прочная коробка, зато нет воды и пожарного проезда. «Если напишем “почти готов”, семьи приедут с чемоданами», — говорит Тимур. Михаил отвечает: «Тогда пишите список работ, а не процент готовности». Ни один дом сегодня заселять нельзя.',
+    choices: [
+      { label: 'Готовить первый дом с заменой перекрытий', next: 'housing_plan', effects: { flags: ['first_house_structure_plan'] }, consequences: 'Вы выбираете строительные работы и более короткую сеть; потребуются экспертиза несущих конструкций и повторная приёмка.' },
+      { label: 'Готовить второй дом, воду и пожарный проезд', next: 'housing_plan', effects: { flags: ['second_house_network_plan'] }, consequences: 'Вы выбираете ремонт коммуникаций; прочная коробка не освобождает от испытаний воды и доступа пожарных.' },
+    ],
+  },
+  {
+    id: 'housing_plan', title: 'Сто тридцать — не автобусный заказ', speaker: 'Марина Белова',
+    text: 'Марина звонит из аварийного общежития. В списке 130 человек: преимущественно семьи, дети, пожилые родственники; есть и одинокие жильцы. «Мы не массовка для вашего срока. Покажите квартиры, стоимость отопления, дорогу до врача. Потом каждая семья решит сама». Вы отправляете договор, смету и список незавершённых работ. Сейчас вы можете предложить только план. Переезд состоится после готового жилья, работающих сетей и независимой приёмки.',
+    choices: [
+      { label: 'Пригласить делегацию жильцов на проверку будущих квартир', next: 'first_commitment', effects: { flags: ['resident_housing_committee'] }, consequences: 'Жильцы участвуют в распределении и проверке; споров станет больше, зато решения не принимаются за них.' },
+      { label: 'Организовать открытый видеоосмотр и письменные замечания', next: 'first_commitment', effects: { flags: ['remote_housing_review'] }, consequences: 'Семьи не тратятся на предварительную поездку; до переезда всё равно будет доступен личный осмотр.' },
+    ],
+  },
+  {
+    id: 'first_commitment', title: 'Начать не с ленточки', speaker: 'Алексей Морозов',
+    text: 'В графике пока нет новоселья. Есть ремонт, проверка воды, зарплаты и резерв бесплатного выезда. Анатолий живёт в своей комнате: его нельзя считать новым привлечённым жителем, но независимая перепись учтёт его как постоянного. Марина просит не называть дату, пока её не подтвердит инспектор. Вы стираете слово «открытие» и пишете «приёмка». Год уже идёт.',
+    choices: [
+      { label: 'Публиковать недельный бюджет и список задержек', next: null, effects: { flags: ['prologue_complete', 'weekly_public_reports'] }, consequences: 'Начинается восстановление. Открытые отчёты требуют времени и делают ошибки видимыми; 130 жителей ещё не переехали.' },
+      { label: 'Создать совет будущих жильцов с правом менять приоритеты', next: null, effects: { flags: ['prologue_complete', 'resident_council'] }, consequences: 'Начинается восстановление с разделением решений. Совет может замедлить ваш график ради нужд семей; переселение ещё не началось.' },
+    ],
+  },
+];
+
+const EVENTS = [
+  {
+    id: 'housing_acceptance', title: 'Ключи только после приёмки', speaker: 'Михаил Громов',
+    requires: ['prologue_complete', 'housing_repairs_complete', 'safe_drinking_water', 'power_inspected', 'fire_access_ready', 'housing_capacity_at_least_130'],
+    text: 'Михаил подписывает акты на подготовленные квартиры. Есть отопление, питьевая вода, исправная проводка и пожарный проезд. Все семьи из списка Марины осмотрели жильё и добровольно согласились переехать: теперь речь действительно о 130 людях, а не о заявках. Спор остался о порядке заселения — некоторые взрослые не могут одновременно уйти с работы.',
+    choices: [
+      { label: 'Организовать общий переезд в выходные', next: null, effects: { money: -9000, population: 130, flags: ['dormitory_residents_arrived'] }, consequences: '130 человек заселяются в принятые квартиры. Общая перевозка стоит $9 000; нагрузка на приёмную и коммунальные службы резко растёт в один день.' },
+      { label: 'Провести переезд несколькими рейсами по семейным графикам', next: null, effects: { money: -12000, population: 130, flags: ['dormitory_residents_arrived', 'phased_move'] }, consequences: 'После завершения всех рейсов численность увеличится на 130. Перевозка стоит $12 000 и занимает две недели; нельзя прибавлять людей до фактического приезда каждого рейса.', applyWhen: 'Завершены все добровольные переезды 130 жителей' },
+    ],
+  },
+  {
+    id: 'water_test', title: 'Вода без запаха', speaker: 'Павел Ершов',
+    requires: ['prologue_complete'],
+    text: 'В лабораторном протоколе превышение по микробиологии. «Она прозрачная, — говорит Павел. — Именно поэтому её будут пить». До повторного удовлетворительного анализа заселение остановлено. Тимур просит решить, что ремонтировать первым: скважину или подвод к внешней сети.',
+    choices: [
+      { label: 'Восстановить скважину и заказать повторные анализы', next: null, effects: { money: -18000, flags: ['well_repair_ordered'] }, consequences: 'Расход $18 000. Потенциально дешёвая собственная вода потребует обслуживания; до подтверждённого безопасного анализа жильё не открывается.', unlocks: ['safe_drinking_water — только после успешного повторного анализа'] },
+      { label: 'Подключиться к действующей внешней сети', next: null, effects: { money: -27000, flags: ['external_water_connection_ordered'] }, consequences: 'Расход $27 000 и постоянный тариф поставщика. Появляется зависимость от внешней магистрали; безопасность подтверждается испытаниями и анализом после подключения.', unlocks: ['safe_drinking_water — только после испытаний и анализа'] },
+      { label: 'Отложить заселение и провести вторую независимую экспертизу', next: null, effects: { money: -3500, flags: ['water_second_opinion'] }, consequences: 'Расход $3 500 и потеря недели. Вы получаете уточнённую причину загрязнения, но не право подавать непроверенную воду жителям.' },
+    ],
+  },
+  {
+    id: 'school_shifts', title: 'Кто забирает детей', speaker: 'Светлана Руденко',
+    requires: ['dormitory_residents_arrived'],
+    text: 'Семьи приехали, а старая школа ещё закрыта. В принятом общественном помещении хватит места для двух смен. Родители с ранними сменами на работе просят утренние уроки, родители младших детей — короткую дорогу. Один ребёнок пользуется коляской: лестницу нельзя считать его личной проблемой.',
+    choices: [
+      { label: 'Открыть временные классы, пандус и группу продлённого дня', next: null, effects: { money: -14000, flags: ['temporary_school', 'after_school_care'] }, consequences: 'Расход $14 000 плюс зарплаты педагогов. Дети учатся рядом с домом, но в две смены; часть семей меняет рабочие графики.' },
+      { label: 'Оплатить доступный школьный автобус в действующую школу', next: null, effects: { money: -8000, flags: ['school_bus_contract'] }, consequences: 'Первый платёж $8 000, затем ежемесячная оплата. Есть оборудованные классы, но дети тратят время на дорогу; перевозчик обязан предоставить доступный транспорт.' },
+    ],
+  },
+  {
+    id: 'payroll', title: 'Пятница без аванса', speaker: 'Тимур Хасанов',
+    requires: ['dormitory_residents_arrived'],
+    text: 'Поставка труб подорожала. Елена показывает кассовый разрыв: если оплатить её сегодня полностью, не хватит на пятничную зарплату. «Мы сами тут снимаем квартиры, — говорит Тимур. — Нам нельзя питаться будущим городом». Рабочие не отказываются от проекта, но не согласны его кредитовать без своего решения.',
+    choices: [
+      { label: 'Заплатить зарплату и перенести часть поставки', next: null, effects: { money: -16000, flags: ['payroll_paid', 'pipe_delivery_delayed'] }, consequences: 'Выплачено $16 000 заработанного. Расширение тепловой сети задерживается; действующие дома сохраняют обслуживание.' },
+      { label: 'Согласовать с поставщиком частичную отгрузку с наценкой', next: null, effects: { money: -19000, flags: ['payroll_paid', 'supplier_installments'] }, consequences: 'Зарплаты выплачены, часть труб приезжает. Текущий расход $19 000; остаток поставки становится документированным обязательством, а не скрытой экономией.' },
+      { label: 'Приостановить новый участок, рассчитаться за выполненную работу', next: null, effects: { money: -16000, flags: ['payroll_paid', 'expansion_paused'] }, consequences: 'Выплачено $16 000. Вы снижаете риск новых долгов, но часть специалистов может уйти на другие объекты; удерживать их обещаниями нельзя.' },
+    ],
+  },
+  {
+    id: 'factory_jobs', title: 'Работа под окнами', speaker: 'Роман Лисицин',
+    requires: ['dormitory_residents_arrived'],
+    text: 'Роман готов открыть мастерскую и взять сорок сотрудников. Он просит льготную аренду и короткий маршрут грузовиков мимо жилого дома. Марина показывает, где дети переходят дорогу. «Без дешёвой логистики я не запущусь», — говорит Роман. «А без безопасной улицы мы не останемся», — отвечает она.',
+    choices: [
+      { label: 'Предложить окраинную площадку и оплатить подъезд', next: null, effects: { money: -22000, flags: ['workshop_outer_site'] }, consequences: 'Расход $22 000. Рабочие места появятся после запуска, не сразу; жильё защищено от грузового потока, но бюджет оплачивает инфраструктуру бизнеса.' },
+      { label: 'Разрешить площадку у квартала с ограниченными часами и защищённым переходом', next: null, effects: { money: -9000, flags: ['workshop_restricted_route'] }, consequences: 'Расход $9 000. Запуск быстрее, но шум остаётся; договор предусматривает измерения и остановку нарушений, а не доверие на слово.' },
+      { label: 'Отказаться от условий и искать другого работодателя', next: null, effects: { flags: ['workshop_offer_declined'] }, consequences: 'Город не субсидирует этот проект и не получает обещанные рабочие места. Семьи могут предпочесть место с более устойчивой занятостью.' },
+    ],
+  },
+  {
+    id: 'clinic', title: 'Не больница на вывеске', speaker: 'Дарья Ким',
+    requires: ['dormitory_residents_arrived'],
+    text: 'Дарья осматривает помещение амбулатории. «Я могу принимать, вести хронических пациентов, оказывать первую помощь. Операционную из этой комнаты не сделать». Семьям нужны и ежедневная помощь, и понятный маршрут при экстренном состоянии. Один из родителей просит обещать, что машина всегда приедет за десять минут. Дарья не обещает невозможного.',
+    choices: [
+      { label: 'Открыть постоянную амбулаторию и договориться с больницей', next: null, effects: { money: -24000, flags: ['clinic_open', 'hospital_transfer_contract'] }, consequences: 'Расход $24 000 и постоянные зарплаты. Первичная помощь рядом, сложные случаи направляются в действующий стационар; время доезда публикуется честно.' },
+      { label: 'Начать с выездной бригады и оплачиваемого медицинского транспорта', next: null, effects: { money: -12000, flags: ['mobile_clinic', 'medical_transport_contract'] }, consequences: 'Первый платёж $12 000. Бригада приезжает по расписанию, транспорт доступен по договору; между визитами возможности помощи ограничены, что сообщается семьям заранее.' },
+    ],
+  },
+  {
+    id: 'winter_warning', title: 'Когда падает давление', speaker: 'Анатолий Зорин',
+    requires: ['dormitory_residents_arrived', 'cold_weather'],
+    text: 'Вечером давление в теплотрассе падает. Анатолий показывает возможный участок, но отказывается идти в траншею: «Голову дам для схемы. Ноги уже не те». Сергей готовит бесплатные автобусы и места временного размещения. На собрании спрашивают, поможет ли платный набор поддержки. «Не с посадкой, — отвечает он. — Выезд бесплатный для каждого, с детьми, колясками и животными. Покупки не дают очереди».',
+    evacuation: { available: true, pricePerPerson: 0, requiresDonation: false, requiresPurchase: false, includes: ['Транспорт', 'Доступные места для маломобильных пассажиров', 'Временное размещение', 'Помощь с домашними животными'], funding: 'Резерв города и договор перевозчика', residentChoice: 'Житель вправе запросить бесплатный выезд при любом варианте решения' },
+    choices: [
+      { label: 'Временно эвакуировать затронутый квартал и ремонтировать без людей', next: null, effects: { money: -15000, flags: ['district_temporarily_evacuated', 'heat_repair_unoccupied'] }, consequences: 'Город расходует $15 000, жители не платят. Семьи временно размещаются в безопасных условиях; возвращение добровольное после проверки отопления. Временная эвакуация не превращается автоматически в постоянное выбытие.' },
+      { label: 'Развернуть проверенное резервное отопление и предложить выезд всем желающим', next: null, effects: { money: -21000, flags: ['backup_heat', 'free_evacuation_open'] }, consequences: 'Расход $21 000. Остаться можно только в признанных безопасными помещениях; при невозможности держать безопасную температуру требуется эвакуация. Бесплатный выезд остаётся доступен без условий.' },
+    ],
+  },
+  {
+    id: 'anatoly_loss', title: 'Пустое место у окна', speaker: 'Дарья Ким',
+    requires: ['dormitory_residents_arrived', 'late_year', 'anatoly_death_confirmed'],
+    text: 'Дарья сообщает, что Анатолий умер в больнице после тяжёлого инсульта. Подробности лечения остаются у семьи. Его смерть не является штрафом за выбор игрока и не доказывает, что один разговор мог её отменить. Сын просит не делать из отца символ рекламной кампании. На столе остались схемы и блюдце для свечи.',
+    presentation: { graphicContent: false, canSkipText: true, skipHasPenalty: false, optionalMemorial: true },
+    onTrigger: { population: -1, flags: ['anatoly_died'] },
+    choices: [
+      { label: 'С согласия семьи устроить тихое прощание для соседей', next: null, effects: { money: -800, flags: ['anatoly_private_memorial'] }, consequences: 'Город покрывает $800 организационных расходов. Участие добровольное; фото и публикации без согласия семьи запрещены. Дополнительного изменения численности нет.' },
+      { label: 'Помочь семье без публичной церемонии', next: null, effects: { money: -800, flags: ['anatoly_family_privacy'] }, consequences: 'Те же $800 идут на транспорт и бытовую помощь. Семья сохраняет приватность; схемы передаются архиву только с её разрешения.' },
+      { label: 'Пропустить сцену прощания, сохранив поддержку семьи', next: null, effects: { money: -800, flags: ['anatoly_scene_skipped'] }, consequences: 'Чувствительная сцена завершается без подробностей и без штрафа за пропуск. Поддержка семьи остаётся той же.' },
+    ],
+  },
+  {
+    id: 'public_bet', title: 'Чей это миллион', speaker: 'Алина Нестерова',
+    requires: ['dormitory_residents_arrived'],
+    text: 'Алина готовит материал о пари. Даже когда договор был опубликован, не все жильцы поняли цену неудачи. «Вы хотите наш город или свою награду?» — спрашивает женщина на встрече. Елена кладёт рядом два бюджета: деньги кооператива и ваши личные обязательства. Ни один житель не должен ваш миллион, но риск расселения касается всех.',
+    choices: [
+      { label: 'Провести открытое собрание с юристом и записями ответов', next: null, effects: { money: -1500, flags: ['public_bet_hearing'] }, consequences: 'Расход $1 500. Жители получают возможность задать неудобные вопросы; некоторые после этого могут добровольно отказаться от переезда или уехать. Уход не блокируется.' },
+      { label: 'Заказать независимый разбор договора и встречи по домам', next: null, effects: { money: -4000, flags: ['independent_resident_legal_review'] }, consequences: 'Расход $4 000. Разъяснения займут больше времени, зато небольшие группы смогут обсудить личные риски без публичного раскрытия обстоятельств семьи.' },
+    ],
+  },
+  {
+    id: 'housing_queue', title: 'Квартира по списку', speaker: 'Марина Белова',
+    requires: ['dormitory_residents_arrived', 'new_housing_ready'],
+    text: 'На сорок готовых квартир подано девяносто заявок. Работодатели требуют места для специалистов. Семьи из временного жилья напоминают, что ждали дольше. Один отец не хочет сообщать всему залу о болезни ребёнка ради приоритета. Марина предлагает спорить о правилах, а не сравнивать чужое несчастье.',
+    choices: [
+      { label: 'Разделить квоту между очередью и необходимыми специалистами', next: null, effects: { flags: ['housing_mixed_quota'] }, consequences: 'Часть давних заявителей ждёт дольше; необходимые службы получают сотрудников. Критерии и порядок обжалования публикуются, медицинские данные проверяются конфиденциально.' },
+      { label: 'Сохранить очередь с конфиденциальным приоритетом срочных нужд', next: null, effects: { flags: ['housing_need_priority'] }, consequences: 'Уязвимые семьи и ранние заявители получают преимущество; вакансии могут остаться незакрытыми. Подача заявления не увеличивает население до заселения.' },
+      { label: 'Провести жеребьёвку среди равных по опубликованным критериям заявок', next: null, effects: { flags: ['housing_equal_group_lottery'] }, consequences: 'Внутри равных групп результат не зависит от знакомств; случайный выбор может разлучить привычных соседей. Срочные потребности рассматриваются отдельно, есть право обжаловать состав групп.' },
+    ],
+  },
+  {
+    id: 'last_count', title: 'Не десять тысяч подписей', speaker: 'Вера Соколова',
+    requires: ['final_month', 'bet_signed'],
+    text: 'До срока месяц. Посредник предлагает тысячи временных регистраций. Вера закрывает папку: «Это не жители. Независимая комиссия их не засчитает». Есть две реальные возможности: закончить уже обследованный квартал для ожидающих семей или вложиться в рабочие места, чтобы не уехали те, кто здесь живёт. Ни одна не гарантирует нужной цифры.',
+    choices: [
+      { label: 'Завершить обследованный квартал, не сокращая приёмку', next: null, effects: { money: -48000, flags: ['final_housing_push'] }, consequences: 'Расход $48 000. Новые семьи могут приехать лишь после приёмки и собственного согласия; население увеличивается по фактическому заселению, без гарантии 10 000.' },
+      { label: 'Поддержать рабочие места и действующие семейные службы', next: null, effects: { money: -30000, flags: ['resident_retention_priority'] }, consequences: 'Расход $30 000. Вероятность отъезда из-за отсутствия работы снижается, но новых квартир не возникает и выигрыш не обещан.' },
+      { label: 'Сохранить резерв и готовиться к обоим исходам', next: null, effects: { flags: ['no_final_spending_rush'] }, consequences: 'Вы не тратите аварийный резерв ради показателя. Шанс достичь цели может снизиться; зато есть средства на обслуживание и бесплатный выезд при любом исходе.' },
+    ],
+  },
+  {
+    id: 'final_audit', title: 'После последней подписи', speaker: 'Виктор Северин',
+    requires: ['one_year_elapsed', 'independent_resident_audit_complete'],
+    text: 'Комиссия фиксирует число постоянных жителей на конец договорного года. Только после подписания акта Северин рассказывает о закрытом клубе, участники которого заключали подобные пари, и показывает документы о других городах. До этой встречи ни герой, ни жители не знали ни о клубе, ни о других проектах. «Для вас это было испытание, — отвечаете вы. — Для них это адрес». Само раскрытие не меняет уже установленных условий и не превращает жителей в приз.',
+    resolution: {
+      success: { when: 'auditedPermanentResidents >= 10000', effects: { money: 10000000, flags: ['bet_won', 'city_property_transferred'] }, consequences: 'Вы получаете $10 000 000 и имущественный комплекс. Договоры жилья, права жителей, зарплаты и обязательства города сохраняются; выигрыш не даёт политической власти над людьми.' },
+      failure: { when: 'auditedPermanentResidents < 10000', effects: { personalDebt: 1000000, flags: ['bet_lost', 'demolition_procedure_started'] }, consequences: 'Возникает личный долг $1 000 000 и запускается предусмотренная договором процедура сноса. Жителей бесплатно перевозят и расселяют до работ; судебное обжалование доступно. Никого не оставляют внутри зданий, пожертвования для выезда не нужны.' },
+      applyExactlyOnce: true,
+      revealOnlyHere: ['Существование закрытого клуба', 'Пари вокруг других городов'],
+    },
+    choices: [
+      { label: 'Опубликовать проверенные документы о клубе и других проектах', next: null, effects: { flags: ['club_exposed', 'story_complete'] }, consequences: 'Алина проверяет документы и публикует материал без персональных данных жильцов. Возникают публичные споры и возможные иски; это не отменяет автоматически долг или награду.' },
+      { label: 'Передать документы юристам и представителям жителей', next: null, effects: { flags: ['club_legal_review', 'story_complete'] }, consequences: 'Сначала начинается правовая проверка и консультации с жителями. Публичность откладывается; коллективные действия возможны, но успех суда не гарантирован.' },
+      { label: 'Не участвовать в клубе и сосредоточиться на обязательствах перед семьями', next: null, effects: { flags: ['club_refused', 'story_complete'] }, consequences: 'Вы отказываетесь от дальнейших пари. При победе занимаетесь городом, при поражении — расселением, правовой защитой и личным долгом. Жители свободны выбирать дальнейшую жизнь.' },
+    ],
+  },
+];
+
+// Независимые диалоги: модуль не изменяет engine, DOM или переданную сессию.
+// Сохраняйте новую session атомарно. effects.id — ключ дедупликации для интеграции:
+// чистая функция не может запретить вызывающей стороне повторно подать старый snapshot.
+// Одно дерево выдаёт один пакет эффектов. Повторные старты того же дерева не должны
+// повторно награждаться интеграцией: id эффекта стабилен для conversationId.
+const paragraphs = (...lines) => lines.join('\n\n');
+const emptyEffects = () => ({ relation: {}, flags: [] });
+const freeze = value => {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(freeze);
+    Object.freeze(value);
+  }
+  return value;
+};
+
+function tree(id, characterId, title, p) {
+  return { id, characterId, title, start: 'opening', nodes: {
+    opening: {
+      text: paragraphs(...p.opening),
+      choices: [
+        { id: 'ask', label: p.ask, next: 'personal', flags: ['heard_personal'] },
+        { id: 'practical', label: p.practicalLabel, next: 'practical_end' },
+        { id: 'together', label: p.togetherLabel, next: 'together_end', requires: ['heard_personal'] },
+        { id: 'refuse', label: p.refuseLabel, next: 'refusal' },
+      ],
+    },
+    personal: {
+      text: paragraphs(...p.personal),
+      choices: [
+        { id: 'together', label: p.togetherLabel, next: 'together_end', requires: ['heard_personal'] },
+        { id: 'practical', label: p.practicalLabel, next: 'practical_end' },
+        { id: 'back', label: 'Давай вернёмся к тому, с чего начали', next: 'opening' },
+        { id: 'refuse', label: p.refuseLabel, next: 'refusal' },
+      ],
+    },
+    practical_end: {
+      text: paragraphs(...p.practical), terminal: true,
+      outcome: { relation: { [characterId]: 1 }, flags: [`${id}:practical`] },
+    },
+    together_end: {
+      text: paragraphs(...p.together), terminal: true,
+      outcome: { relation: { [characterId]: 2 }, flags: [`${id}:together`] },
+    },
+    refusal: {
+      text: paragraphs(...p.refusal), terminal: true,
+      outcome: { relation: { [characterId]: 0 }, flags: [`${id}:declined`] },
+    },
+  } };
+}
+
+const CONVERSATIONS = freeze([
+  tree('ilya_evening', 'engineer', 'Ещё один вечер', {
+    opening: ['Илья складывает отвёртки, но не закрывает сумку. «Скажи сразу: ты сейчас попросишь остаться? Я детям обещал блины. Уже второй четверг обещал».', 'В окне отражается недособранный щит. До утра он может остаться отключённым; без света будет пустой подъезд, не жилые квартиры.', '«Я понимаю, что у тебя сроки. Просто мои дома тоже умеют считать».'],
+    ask: 'А как дети приняли переезд?', practicalLabel: 'Иди домой. Завтра закончим в рабочее время', togetherLabel: 'Давай заранее выберем вечера, в которые тебя нельзя задерживать', refuseLabel: 'Не буду сейчас решать за бригаду. Оставим подъезд закрытым',
+    personal: ['«Младший уже нашёл приятеля. Старшая говорит, что ей всё равно. Когда ей всё равно, она обычно злится». Илья наконец застёгивает сумку.', '«На прежней работе я приезжал с вахты с подарками. Думал, так наверстаю. А потом узнал, что она уже месяц не любит тот шоколад».', 'Он смотрит на часы. «Мне не нужен праздник в мою честь. Мне бы попасть на обычный ужин».'],
+    practical: ['«Завтра — значит завтра». Илья убирает ключи от щита в подписанный конверт.', 'Вы отмечаете незаконченный участок. Сегодняшний разговор не сделал работу готовой и не назначил новую смену.', 'У двери он оборачивается: «Тебе блин оставить? Только ответь сейчас, а то съедят».'],
+    together: ['Илья достаёт телефон. «Вторник и четверг. Хотя бы эти два. Остальное сначала спрашивай, не вписывай молча».', 'Вы договариваетесь обсуждать график заранее. Это не обещание, что аварий больше не будет, и не обязанность Ильи всегда спасать положение.', '«Вот теперь можно домой». Он отправляет короткое сообщение: «Скоро буду».'],
+    refusal: ['«Хорошо. Только закрытым, а не “Илья вечером доделает”». Он не повышает голос.', 'Вы не заключаете договорённостей о новом графике. Подъезд остаётся незавершённым, вопрос нужно будет решать отдельно.', 'Илья берёт сумку. «Ладно. Увидимся утром».'],
+  }),
+  tree('ilya_tools', 'engineer', 'Чья это дрель', {
+    opening: ['На столе Ильи лежит дрель с расколотой ручкой. «Моя. Принёс на один день, теперь её все берут. Сегодня нашли под дождём».', 'Он пытается сдвинуть заедающую защёлку и сразу откладывает инструмент. «Не надо говорить “мы же свои”. Я её за свои и покупал».', 'В соседней комнате спорят, кому завтра сверлить крепления. Илья ждёт вашего ответа.'],
+    ask: 'Ты говорил об этом ребятам?', practicalLabel: 'Личный инструмент больше не одалживаем без спроса', togetherLabel: 'Давай вместе обсудим общий инструмент и ответственность за него', refuseLabel: 'Не обещаю сейчас компенсацию. Давай остановим выдачу этой дрели',
+    personal: ['«Говорил. Они думали, что это городская. Я не подписал, они не спросили. Теперь все обижены, будто я их в воровстве обвиняю».', 'Илья проводит пальцем по старой наклейке на корпусе. «Марина подарила. Я понимаю, вещь. Но всё равно неприятно».', '«Не надо устраивать разнос. Мне ещё с ними рядом работать».'],
+    practical: ['Вы предлагаете ясно отделить личные вещи от общих. Илья пишет своё имя на ящике.', '«Разумно. Только общая дрель от надписи не появится». Он прав: закупка и ремонт потребуют отдельного решения.', 'Повреждённый инструмент он забирает. Сегодня никто больше не включит его по привычке.'],
+    together: ['«Пойдём сейчас, пока они тут». Илья берёт дрель, но оставляет её на столе у двери, не несёт как улику.', 'Вы согласны обсудить общий запас и порядок выдачи без поиска виноватого наугад. Денег на новый инструмент разговор сам по себе не выделяет.', 'Из комнаты слышно: «Чаю будете?» Илья отвечает: «Будем. И поговорить надо».'],
+    refusal: ['«Спасибо, что не обещаешь купить завтра». Илья кладёт дрель в свой ящик.', 'Вопрос ремонта остаётся открытым. Вы не списываете деньги и не назначаете виновного.', '«Ладно. На сегодня хватит. Только скажи остальным, что эту не брать».'],
+  }),
+  tree('darya_queue', 'doctor', 'За закрытой дверью', {
+    opening: ['Дарья открывает дверь после последнего пациента. На подоконнике стоит нетронутый йогурт. «Если пришёл спросить, почему медленно, садись. Объясню».', 'В коридоре женщина просила пропустить её без очереди, потому что ей нужно на смену. Следом пришёл мужчина, которому трудно стоять. Оба решили, что врач выбрала чужую сторону.', '«Мне нужно смотреть людей, а не каждый раз доказывать, что я не нарочно».'],
+    ask: 'Что сегодня было самым тяжёлым?', practicalLabel: 'Найдём человека для записи и разговоров в коридоре', togetherLabel: 'Давай вместе объясним, как попасть на приём и когда нужна срочная помощь', refuseLabel: 'Я не буду распоряжаться твоей очередью',
+    personal: ['«Мальчик спросил, почему мама плачет. А мама плакала не от болезни. Она боялась, что за пропущенную смену её уволят».', 'Дарья снимает очки. «Я дала ей справку. Работу ей вернуть, если что, не смогу. И ты, наверное, тоже не всегда».', 'Она наконец открывает йогурт. «Мне бы, чтобы люди знали, куда идти, прежде чем совсем прижмёт».'],
+    practical: ['«Помощник был бы кстати. Только не охранник с криком “всем ждать”».', 'Вы обсуждаете отдельную запись и информацию для ожидающих. Найм ещё предстоит оформить: новый сотрудник от разговора не появляется.', 'Дарья кивает на стул: «Раз уж сел, дай мне хотя бы спокойно доесть».'],
+    together: ['«Давай. Только без обещаний, что никто никогда не будет ждать».', 'Вы договорились о встрече с жителями: Дарья объяснит медицинскую часть, вы выслушаете бытовые трудности. Частные истории пациентов останутся за дверью.', '«И лучше вечером. Днём опять придут те, кто и так может отпроситься».'],
+    refusal: ['«И правильно. Но коридор мне всё равно одной не разнять».', 'Вы оставляете медицинские решения врачу и не обещаете дополнительный штат. Проблема ожидания остаётся.', 'Дарья прячет ложку в стакан. «Если услышишь жалобы, сначала спроси, что случилось. Не отвечай за меня».'],
+  }),
+  tree('darya_weekend', 'doctor', 'Один выходной', {
+    opening: ['Дарья стоит у машины с детским рюкзаком. «Мы едем к сестре. На сутки. Телефон дежурной службы висит на двери».', 'Дочь уже устроилась сзади и делает вид, что не слушает. «Я не спрашиваю разрешения. Но хочу понять: завтра мне опять скажут, что я бросила город?»', 'Врач ждёт не похвалы. Она хочет услышать, что вы действительно поняли.'],
+    ask: 'Тебя уже так встречали после выходного?', practicalLabel: 'Напомним жителям, куда обращаться, пока тебя нет', togetherLabel: 'Обсудим замену, чтобы отдых не держался на твоём чувстве вины', refuseLabel: 'Не стану обещать, что никто не будет недоволен',
+    personal: ['«В прошлый раз я отвечала из автобуса. Муж сказал: ты с нами едешь или только сумка?»', 'Она смотрит на заднее сиденье. «Дочка стала заранее спрашивать, можно ли ей радоваться планам. Представляешь формулировку?»', '«Я люблю свою работу. Но не хочу, чтобы дома меня ждали как редкую посылку».'],
+    practical: ['«Хорошо. Номер службы, адрес стационара, транспорт. Без моего личного телефона крупными буквами».', 'Вы договорились повторить уже существующие контакты. Это не создаёт дополнительную медицинскую бригаду.', 'Дарья садится в машину. Сзади сразу спрашивают: «Теперь точно едем?»'],
+    together: ['«Мне нужна настоящая замена, а не человек, который будет каждую минуту звонить мне».', 'Вы согласны отдельно обсудить оплачиваемое дежурство и пределы работы. Пока договор не заключён, нельзя считать вопрос решённым.', 'Она выдыхает. «Ладно. Тогда до понедельника. Если не экстренное — до понедельника».'],
+    refusal: ['«Этого никто не обещает». Дарья пожимает плечами. «Мне важно, чтобы ты сам не повторял за ними».', 'Вы не договорились о новом порядке работы. Действующие маршруты помощи остаются прежними.', 'Она закрывает дверь. Поездка семьи не становится наградой за ваш ответ.'],
+  }),
+  tree('marina_boxes', 'organizer', 'Подписи на коробках', {
+    opening: ['Марина сидит на перевёрнутом ящике у подъезда. На коробках написаны фамилии. «Меня опять спросили, где чей чайник. Я помню все квартиры, но не могу помнить все чайники».', 'К ней подходит сосед с вопросом, и она впервые за день отвечает: «Через десять минут». Потом смотрит на вас: «Видишь? Уже чувствую себя виноватой».', '«Я вызвалась помочь с переездом. Не стать круглосуточной справочной».'],
+    ask: 'А тебе самой кто помогал переезжать?', practicalLabel: 'Сделаем отдельное место для вопросов и сменных дежурных', togetherLabel: 'Давай распределим помощь так, чтобы ты могла отказаться от смены', refuseLabel: 'Не буду сейчас назначать новых ответственных без их согласия',
+    personal: ['«Илья после работы таскал коробки. Дети собирали свою комнату. А я весь вечер искала чужие ключи».', 'Марина улыбается, но устало. «Дочь повесила на нашу дверь бумажку: “Мама тоже здесь живёт”. Я сняла. Теперь думаю, зря».', 'Она поправляет надпись на коробке. «Я не хочу перестать помогать. Хочу иногда зайти домой».'],
+    practical: ['«Стол можно внизу. Только не пиши на нём мой номер».', 'Вы договорились вынести вопросы в общее место. Кто будет дежурить, ещё нужно спросить; Марина не назначена ответственной автоматически.', 'Она встаёт с ящика. «Эти десять минут я всё-таки заберу себе».'],
+    together: ['«Первую смену возьму. Но если потом кто-то не придёт, не записывай меня запасной навечно».', 'Вы согласны составлять список только с добровольцами и оставить право меняться. Это менее удобно, чем один незаменимый человек.', 'Марина достаёт телефон. «Сначала домой напишу. Пусть чайник ставят — наш».'],
+    refusal: ['«Да. Без спроса получится то же самое, только с другой фамилией».', 'Новый порядок не установлен. Марина вправе закончить помощь сегодня, а нерешённые вопросы останутся до завтра.', 'Она поднимает свою коробку. «Тогда эту я наконец отнесу».'],
+  }),
+  tree('marina_leave', 'organizer', 'Если мы уедем', {
+    opening: ['Марина просит пройтись без остальных. «У Ильи есть предложение работы. В другом месте. Я не говорю, что мы уезжаем. Но мы обсуждаем».', 'Вы невольно смотрите на заселённые окна. Она замечает: «Только не начинай про то, сколько нас в твоём счётчике. Нас четверо. Мы семья».', 'Разговор неприятный именно потому, что никто здесь не хочет скандала.'],
+    ask: 'Что для вас сейчас решает больше всего?', practicalLabel: 'Дадим вам понятный расчёт расходов и условий выезда', togetherLabel: 'Сравним варианты спокойно, без уговоров остаться', refuseLabel: 'Я не могу обещать работу лучше. Решение за вами',
+    personal: ['«Не только деньги. Здесь дети привыкли. Там стабильнее работа. Илья боится опять жить ожиданием зарплаты».', 'Марина останавливается у детской площадки. «А я боюсь опять переезжать. И злюсь, что из-за этого будто мешаю ему».', '«Мы хотим решить сами. Но нам нужны настоящие цифры, не рекламная надежда».'],
+    practical: ['«Вот это полезно. Без мелкого шрифта про штраф за отъезд».', 'Вы договорились предоставить сведения. Ни удержания вещей, ни наказания за добровольный отъезд не появляется; фактический выезд оформляется отдельно.', 'Марина смотрит на окна. «Скажу Илье, что поговорили нормально».'],
+    together: ['«Можно. Только не приглашай нас на собрание как пример неблагодарности».', 'Вы согласны сравнить расходы, работу и нужды детей. Ни согласия уехать, ни обещания остаться эта беседа не заменяет.', 'Она впервые улыбается. «Может, хоть дома сегодня поговорим не на повышенных».'],
+    refusal: ['«Спасибо, что не стал придумывать». Марина прячет руки в карманы.', 'Семья продолжит обсуждение сама. Население от этого разговора не меняется: решения и переезда ещё нет.', '«Если решим, скажем заранее. Не исчезнем ночью».'],
+  }),
+  tree('anatoly_kettle', 'anatoly', 'Две чашки', {
+    opening: ['Анатолий наливает чай в две разные чашки. «Эта с трещиной моя. Не спорь, я знаю, где она течёт».', 'На блюдце стоит огарок свечи. Вы тянетесь убрать его, но хозяин придерживает блюдце. «Пускай. Я к нему привык».', 'Он кивает на стул: «Ты по делу или просто? По делу я сегодня уже устал».'],
+    ask: 'Можно просто посидеть? Как прошёл день?', practicalLabel: 'Я ненадолго. Скажи, что привезти из магазина', togetherLabel: 'Давай иногда пить чай без разговоров о стройке', refuseLabel: 'Не буду мешать. Зайду в другой раз, если позовёшь',
+    personal: ['«Хорошо прошёл. Сын звонил. Спрашивал, тепло ли. Я спросил, ел ли он. Два человека, которым давно пора придумать новые вопросы».', 'Анатолий смеётся и подвигает сахар. «Ему всё кажется, что я тут один против зимы. А мне всё кажется, что он ещё маленький».', 'В комнате ненадолго тихо. На этот раз никто не торопится заполнить тишину планами.'],
+    practical: ['«Хлеб. И яблок два. Не пакет, два». Он достаёт деньги из жестяной коробки.', 'Вы принимаете список, не превращая покупку в обмен на схемы и советы. Доставка ещё не выполнена.', '«Чай всё равно допей. Он уже налит».'],
+    together: ['«Давай. Только не называй это посещением пожилого гражданина».', 'Вы договариваетесь иногда заходить, предварительно спрашивая. Это дружеское приглашение, не обязанность хозяина всегда открывать дверь.', 'Анатолий берёт вторую чашку. «Эта, кстати, тоже с трещиной. Но поменьше».'],
+    refusal: ['«Ладно. Я и правда прилечь хотел». Он не делает вид, что обиделся.', 'Вы уходите без нового обещания. Отказ от беседы не ухудшает здоровье и не запускает наказание.', 'На пороге он добавляет: «Дверь притяни. Она сама не дохлопывает».'],
+  }),
+  tree('anatoly_keys', 'anatoly', 'Старый ключ', {
+    opening: ['Анатолий держит тяжёлый ключ на проволочном кольце. «От котельной. Замок уже другой, а я всё ношу».', 'Вы предлагаете место в архиве. Он не отвечает сразу. «Тебе кажется, это вещь. А мне кажется, сейчас отдам — и меня окончательно списали».', 'Он говорит спокойно. Вы можете тоже не торопиться с красивыми словами.'],
+    ask: 'Чего тебе больше всего не хватает от той работы?', practicalLabel: 'Оставь ключ себе. Для архива хватит фотографии, если разрешишь', togetherLabel: 'Запишем твои воспоминания, но ты сам решишь, что оставить', refuseLabel: 'Не будем сегодня ничего отдавать и записывать',
+    personal: ['«Не шума. Шума я наслушался. Людей не хватает. Утром заходишь, а кто-нибудь уже ругается на чайник».', 'Он перебирает кольцо. «Теперь все спрашивают, как трубы шли. А как мы жили — редко. Будто я сам труба, только ещё разговариваю».', '«Были хорошие люди. И трудные были. Не надо потом делать, что мы все святые».'],
+    practical: ['«Снимай. Только руку мою не надо крупно. Опять скажут: смотрите, какие старые руки».', 'Анатолий оставляет ключ себе. Фотография допустима с его согласия, публикация потребует отдельного разговора.', 'Он убирает ключ в карман. «Так легче. Пока пусть побудет».'],
+    together: ['«Можно попробовать. Если наговорю лишнего — вычеркнем».', 'Вы согласны, что запись принадлежит не рекламному плану: Анатолий сможет убрать личное и отказаться от публикации.', '«Начнём не с котельной. С автобуса. Нас на первую смену такой автобус возил, ты бы видел».'],
+    refusal: ['«Хорошо. Я сам не знаю, зачем достал». Он прячет ключ.', 'Ни архив, ни публичное выступление не назначены. Воспоминания не становятся платой за право остаться дома.', 'Вы ещё немного стоите у окна, а потом разговор переходит на погоду.'],
+  }),
+]);
+
+const byId = new Map(CONVERSATIONS.map(item => [item.id, item]));
+function view(def, nodeId, flags, finished = false, effectsApplied = false) {
+  const node = def.nodes[nodeId];
+  return {
+    conversationId: def.id, characterId: def.characterId, nodeId,
+    title: def.title, text: node.text, flags: [...flags], finished, effectsApplied,
+    choices: finished ? [] : (node.choices || [])
+      .filter(c => (c.requires || []).every(flag => flags.includes(flag)))
+      .map(c => ({ id: c.id, label: c.label })),
+  };
+}
+
+function startConversation(id) {
+  const def = byId.get(id);
+  return def ? view(def, def.start, []) : null;
+}
+
+function chooseReply(session, choiceId) {
+  const fail = error => ({ ok: false, session, reply: '', effects: emptyEffects(), error });
+  if (!session || typeof session !== 'object') return fail('invalid_session');
+  const def = byId.get(session.conversationId);
+  if (!def || !Object.hasOwn(def.nodes, session.nodeId) || !Array.isArray(session.flags) || session.flags.some(f => typeof f !== 'string')) return fail('invalid_session');
+  if (session.finished || session.effectsApplied || def.nodes[session.nodeId].terminal) return fail('conversation_finished');
+  const node = def.nodes[session.nodeId];
+  const choice = (node.choices || []).find(c => c.id === choiceId);
+  if (!choice) return fail('invalid_choice');
+  if (!(choice.requires || []).every(flag => session.flags.includes(flag))) return fail('choice_locked');
+  const flags = [...new Set([...session.flags, ...(choice.flags || [])])];
+  const destination = def.nodes[choice.next];
+  if (!destination) return fail('invalid_destination');
+  const finished = destination.terminal === true;
+  const effects = finished ? {
+    id: `conversation:${def.id}:complete`,
+    relation: { ...destination.outcome.relation },
+    flags: [...destination.outcome.flags],
+  } : emptyEffects();
+  const next = view(def, choice.next, [...new Set([...flags, ...effects.flags])], finished, finished);
+  return { ok: true, session: next, reply: destination.text, effects };
+}
+
+const ASSET_BASE='https://raw.githubusercontent.com/korinecdanila-sys/City-game/main/';
+const file=name=>ASSET_BASE+encodeURIComponent(name+'.jpeg');
+/** Portraits provided by the user in City-game repository. */
+const assets={
+ city:{
+  spring:file('весна'),summer:file('лето'),autumn:file('осень'),winter:file('зима')
+ },
+ portraits:{
+  'Алексей Морозов':file('Алексей Морозов'),'Виктор Северин':file('Виктор Северин'),'Анатолий Зорин':file('Анатолий'),
+  'Анатолий':file('Анатолий'),'Илья Белов':file('Илья Белов'),'Дарья Ким':file('Дарья Ким'),
+  'Марина Белова':file('Марина Белова'),'Тимур Хасанов':file('Тимур Хасанов'),'Вера Соколова':file('Вера Соколова'),
+  'Михаил Громов':file('Михаил Громов'),'Светлана Руденко':file('Светлана Руденко'),'Нина Воронцова':file('Нина Воронцова'),
+  'Сергей Баранов':file('Сергей Баранов'),'Роман Лисицин':file('Роман Лисицин'),'Павел Ершов':file('Павел Ершов'),
+  'Елена Хасанова':file('Елена Хасанова'),'Алина Нестерова':file('Алина Нестерова')
+ }
+};
+function escapeHTML(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function cityImage(seasonKey='spring'){const names={spring:'весна',summer:'лето',autumn:'осень',winter:'зима'};const src=assets.city[seasonKey]||assets.city.spring;return `<figure class="city-art"><img src="${src}" alt="Панорама города: ${names[seasonKey]||'весна'}" decoding="async"><figcaption>ГОРОД ЖДЁТ ВАШИХ РЕШЕНИЙ</figcaption></figure>`;}
+function portrait(name='Анатолий'){const src=assets.portraits[name];if(!src)return '<div class="portrait portrait--empty" aria-hidden="true">?</div>';return `<img class="portrait" src="${src}" alt="${escapeHTML(name)}" decoding="async">`;}
+function hasPortrait(name){return Boolean(assets.portraits[name]);}
+const STORAGE_KEY='dawn.rebuild.v1';
+function readSave(storage,validate,migrate=null){
+ try{
+  const raw=storage.getItem(STORAGE_KEY);
+  if(raw===null)return {data:null,error:null};
+  const data=JSON.parse(raw);
+  if(data?.game&&migrate){const result=migrate(data.game);if(result.ok)data.game=result.state;}
+  if(!data||data.version!==1||!data.game||!validate(data.game).ok)return {data:null,error:'Сохранение несовместимо или повреждено. Оно не удалено.'};
+  return {data,error:null};
+ }catch(e){return {data:null,error:'Сохранение недоступно или повреждено. Оно не удалено.'};}
+}
+function writeSave(storage,data){try{storage.setItem(STORAGE_KEY,JSON.stringify(data));return true;}catch{return false;}}
+
+
+
+
+
+
+const app=document.getElementById('app');
+let storage;try{storage=window.localStorage;}catch{storage={getItem(){throw Error()},setItem(){throw Error()}}}
+const restored=readSave(storage,validateSave,migrateSave);
+let model=restored.data||{version:1,game:newGame(),name:'Новая Надежда',scene:0,started:false,history:[],dialogueFlags:[]};
+model.completedConversations??=[];
+model.personalRelations??={anatoly:50};
+let tab='city',warning=restored.error,toastTimer;
+function conversationView(){const s=model.conversation;if(!s)return '';return `<section class="card adviser">${s.characterId==='anatoly'?portrait('Анатолий'):portrait((model.game.characters[s.characterId]||{}).name||'')}<div class="kicker">Личный разговор</div><h2>${E(s.title)}</h2>${s.text.split('\n\n').map(t=>'<p>'+E(t)+'</p>').join('')}${s.finished?button('Закончить разговор','closeConversation'):s.choices.map(c=>button(E(c.label),'reply',`data-id="${c.id}"`)).join('<br>')}</section>`;}
+function conversationList(){return `<section class="card"><h2>Разговоры с жителями</h2><p>Узнайте личную историю. Каждый разговор меняет отношения только один раз.</p>${Object.values(CONVERSATIONS).map(c=>{const done=model.completedConversations.includes('conversation:'+c.id+':complete');const dead=model.game.characters[c.characterId]?.health==='dead';return button(E(c.title)+(done?' · завершён':''),'conversation',`data-id="${c.id}" ${done||dead?'disabled':''}`)}).join('<br>')}</section>`;}
+const currency=n=>'$'+Number(n).toLocaleString('ru-RU');
+const serviceNames={power:'Электроснабжение',water:'Вода',heat:'Котельная',sewer:'Канализация',supply:'Питание и быт'};
+function save(){if(!writeSave(storage,model))warning='Сохранение недоступно: не закрывайте страницу.';}
+function toast(text){const el=document.getElementById('toast');el.textContent=text;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,4500);}
+function button(text,action,attrs='',primary=false){return `<button class="${primary?'primary ':''}full" data-action="${action}" ${attrs}>${text}</button>`;}
+function doAction(action){const result=act(model.game,action,Date.now());if(!result.ok){toast(result.error?.message||'Действие недоступно');return;}model.game=result.state;model.history.unshift(...result.effects.map(text=>({day:model.game.day,text})));model.history=model.history.slice(0,100);save();render();if(result.effects.length)toast(result.effects[0]);}
+function art(){return cityImage(['spring','summer','autumn','winter'][season(model.game).index]||'spring');}
+function speakerPortrait(name){return ['Анатолий','Анатолий Зорин','Виктор Северин','Илья Белов','Дарья Ким','Марина Белова','Тимур Хасанов','Светлана Руденко','Сергей Баранов','Павел Ершов','Елена Хасанова','Алина Нестерова'].includes(String(name))?portrait(String(name).startsWith('Анатолий')?'Анатолий':String(name)):'';}
+function intro(){
+ const flags=Array.isArray(model.dialogueFlags)?model.dialogueFlags:[];
+ if(flags.includes('bet_declined')){
+  app.innerHTML=`<main><article class="card story-card"><div class="kicker">Пролог завершён</div><h1>Вы отказались от пари</h1><p>Договор не подписан. Стартовый капитал не получен, личного долга нет. Вы вправе не принимать этот риск.</p><p>Это отдельный исход истории, а не неправильный ответ.</p>${button('Начать новую историю','reset','',true)}</article></main>`;
+  return;
+ }
+ const scene=STORY[model.scene]||STORY[0];
+ const text=scene.id==='morning'?`На утреннем осмотре вы обходите лужу у заводской проходной. Ночью вы предложили имя «${model.name}». Анатолий смотрит на восточный склон: «Имя есть. Теперь надо, чтобы за ним дом был, а не вывеска». Видны школа, два жилых квартала и покосившаяся крыша старого дома культуры. На доске объявлений выцвело расписание кружков.`:scene.text;
+ const naming=scene.id==='night_talk'?`<section class="card"><label for="storyNameInput">Как вы назовёте город?</label><p><small>Вы познакомились с Анатолием. До утреннего осмотра предложите своё имя города — его можно будет изменить позднее.</small></p><input id="storyNameInput" maxlength="30" value="${E(model.name)}"></section>`:'';
+ app.innerHTML=`<main>${art()}<article class="card story-card"><div class="kicker">Глава 1 · ${E(scene.speaker||'Начало')}</div>${speakerPortrait(scene.speaker)}<h1>${E(scene.title)}</h1><p>${E(text)}</p>${naming}<div class="dialogue">${(scene.choices||[]).map((c,i)=>`<section class="card">${button(E(c.label),'story',`data-option="${i}"`,i===0)}${c.consequences?`<p><small>Последствия: ${E(c.consequences)}</small></p>`:''}</section>`).join('')}</div><small>Выборы пролога сохраняют сюжетные отметки и запись в журнале. Стартовые $200 000 уже включены в начальный бюджет и не начисляются повторно. Сюжетные планы сами по себе не выполняют строительные работы и не меняют отношения персонажей. Локальная одиночная версия; сезоны меняются каждые семь реальных суток.</small></article></main>`;
+}
+function overview(){const s=model.game;const ready=s.houses.flatMap(h=>h.entrances).filter(e=>e.stage===3).length;return `<section class="card adviser">${portrait()}<div class="kicker">Анатолий · следующий шаг</div><h2>${s.population?'У города появились люди':'Начнём с одного подъезда'}</h2><p>${s.population?'Следите за резервом мощности, расходами и здоровьем людей. Не нужно подключать пустые дома без плана.':'Расчистите подъезд, восстановите его и подключите пять основных систем. Затем пригласите первую группу из общежития.'}</p><div class="clear"></div>${button('Открыть план работ →','tab','data-id="build"',true)}</section>${art()}<section class="card"><h3>Ваш город</h3><p>Домов: ${s.houses.length}. Готовых подъездов: ${ready}. Население: ${s.population}.</p><p>Цель: ${s.target} жителей до конца 365-го дня.</p><small>Доход за всё время: ${currency(s.ledger.income)} · расходы: ${currency(s.ledger.expenses)}. Содержание идёт при игровых действиях, не во время отсутствия.</small></section>${button('Прожить один день','wait','data-days="1"')}`;}
+function construction(){const s=model.game;return `<section class="card adviser"><h2>План восстановления</h2><p>Работайте по порядку: расчистка → ремонт → подключение. Пустые подключённые мощности тоже требуют содержания. Кнопка выполняет указанную работу.</p></section>${s.houses.map(h=>`<section class="card"><h3>Дом ${E(h.id)}</h3>${h.entrances.map((e,i)=>{const labels=['Расчистить · $1 500','Отремонтировать · $8 000','Подключить · $1 500'];return `<div class="card"><strong>Подъезд ${i+1}</strong><p>${['Аварийный','Расчищен','Отремонтирован','Готов к заселению'][e.stage]} · жителей: ${e.residents}/130</p>${e.stage<3?button(labels[e.stage],'repair',`data-house="${h.id}" data-entrance="${i}" data-step="${['clear','repair','connect'][e.stage]}"`,true):e.residents?'<span class="badge">Заселён</span>':button(s.firstArrivalClaimed?'Пригласить жителей':'Пригласить 130 жителей общежития','settle',`data-house="${h.id}" data-entrance="${i}"`,true)}</div>`}).join('')}</section>`).join('')}<section class="card"><h3>Следующий дом</h3><p>Можно начать заранее, но сначала оцените свободное жильё и резерв инфраструктуры.</p>${button('Начать следующий дом · $12 000','newHouse')}</section><h2>Инфраструктура</h2>${Object.entries(s.infrastructure).map(([id,x])=>`<section class="card"><h3>${serviceNames[id]}</h3><p>Уровень ${x.level} · мощность ${x.capacity} жителей · штат ${x.staff}.</p>${x.damaged?'<p class="danger">Авария: новое заселение остановлено.</p>'+button('Восстановить систему · $3 000','repairService',`data-id="${id}"`,true):button('Увеличить мощность · $20 000','infrastructure',`data-id="${id}"`)}</section>`).join('')}`;}
+function people(){const s=model.game;return `${conversationView()}${conversationList()}<section class="card"><h2>Семьи города</h2><p>Домохозяйств: ${s.households.length}. Взрослых работников: ${s.households.reduce((n,h)=>n+h.workers,0)}. Детей: ${s.households.reduce((n,h)=>n+h.children,0)}.</p><small>Каждая семья имеет адрес и занимает место в конкретном подъезде. Численность проверяется при каждом действии.</small></section><section class="card"><h2>Жители и специалисты</h2><p>При травме отсчёт идёт в игровых днях. До ожидания или строительства сначала проверьте, кому нужна помощь.</p></section>${Object.entries(s.characters).map(([id,c])=>`<section class="card ${['injured','critical'].includes(c.health)?'danger':''}">${portrait(c.name)}<h3>${E(c.name)}</h3><p>Отношение: ${c.relation}/100 · состояние: ${E({healthy:'здоров',injured:'травмирован',critical:'критическое',dead:'погиб'}[c.health]||c.health)}${c.dueDay!==null?' · следующий срок: день '+c.dueDay:''}</p>${c.health==='healthy'&&!c.dialogueDone?'<blockquote>«До начала работ хочу обсудить условия и безопасность. Вы готовы меня выслушать?»</blockquote>'+button('Выслушать · отношения +5 · 1 день','dialogue',`data-id="${id}" data-choice="listen"`,true)+button('Отмахнуться · отношения −10 · 1 день','dialogue',`data-id="${id}" data-choice="dismiss"`):''}${['injured','critical'].includes(c.health)?['free','medical','refuse'].map((choice,i)=>button(['Организовать бесплатную помощь · 1 день','Медицинская помощь · $2 000','Отказаться от помощи'][i],'help',`data-id="${id}" data-choice="${choice}"`,i===0)).join('<br>'):''}</section>`).join('')}<h2>Справочник персонажей истории</h2><p>Эти 16 биографий — сюжетный справочник. Не все персонажи активны в игровом движке; действующие состояния и помощь показаны в карточках выше.</p>${CHARACTERS.map(c=>`<section class="card">${portrait(c.name)}<h3>${E(c.name)}</h3><small>${E(c.role)}</small><p>${E(c.background)}</p></section>`).join('')}`;}
+function events(){return model.game.events.filter(e=>!e.resolved).map(e=>{const choices=e.kind==='threat'?[['secure','Организовать охрану · 1 день'],['pay','Оплатить меры защиты · $5 000'],['ignore','Игнорировать: авария сети, травма Ильи, отношения −10; содержание +$100/день до ремонта']]:e.kind==='election'?[['community','Общественная программа · отношения +5'],['austerity','Жёсткая экономия · отношения −15']]:[['claim','Получить помощь']];return `<section class="card danger"><div class="kicker">Событие</div><h2>${E(e.title)}</h2>${choices.map(([value,label])=>button(label,'event',`data-id="${e.id}" data-choice="${value}"`)).join('<br>')}</section>`}).join('');}
+function settings(){return `<section class="card"><h2>Название города</h2><input id="nameInput" maxlength="30" value="${E(model.name)}">${button('Сохранить','rename')}</section><section class="card"><h3>Важные ограничения</h3><p>Одиночная локальная игра. Онлайн-рейтинг, Telegram Stars и рекламные награды не подключены. Оплата не является единственным способом спасти персонажа.</p>${button('Начать заново','reset')}</section><section class="card"><h3>Журнал</h3>${model.history.map(l=>`<div class="log"><small>День ${l.day}</small><p>${E(l.text)}</p></div>`).join('')}</section>`;}
+function render(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b||b.disabled)return;const d=b.dataset;
+ if(d.action==='tab'){tab=d.id;render();window.scrollTo(0,0);return}
+ if(d.action==='conversation'){const c=startConversation(d.id);if(!c||model.completedConversations.includes('conversation:'+d.id+':complete')||model.game.characters[c.characterId]?.health==='dead')return;model.conversation=c;save();render();window.scrollTo(0,0);return;}
+ if(d.action==='closeConversation'){model.conversation=null;save();render();return;}
+ if(d.action==='reply'){if(!model.conversation)return;const r=chooseReply(model.conversation,d.id);if(!r.ok){toast('Этот ответ недоступен.');return;}model.conversation=r.session;const fx=r.effects;if(fx.id&&!model.completedConversations.includes(fx.id)){for(const [id,delta]of Object.entries(fx.relation)){const p=model.game.characters[id];if(p)p.relation=Math.max(0,Math.min(100,p.relation+delta));else model.personalRelations[id]=Math.max(0,Math.min(100,(model.personalRelations[id]??50)+delta));}model.completedConversations.push(fx.id);model.dialogueFlags=[...new Set([...model.dialogueFlags,...fx.flags])];model.history.unshift({day:model.game.day,text:'Завершён разговор: '+r.session.title});}save();render();return;}
+ if(d.action==='story'){
+  if(model.started||model.dialogueFlags?.includes('bet_declined'))return;
+  const scene=STORY[model.scene],choice=scene?.choices?.[Number(d.option)];if(!choice)return;
+  const flags=[...new Set([...(Array.isArray(model.dialogueFlags)?model.dialogueFlags:[]),...(choice.effects?.flags||[])])];
+  const next=choice.next===null?-1:STORY.findIndex(s=>s.id===choice.next);
+  if((choice.next!==null&&next<0)||(choice.next===null&&!flags.includes('bet_declined')&&!flags.includes('prologue_complete'))){toast('У этой ветки пока нет продолжения. Прогресс не изменён.');return;}
+  if(scene.id==='night_talk'){
+   const name=document.getElementById('storyNameInput')?.value.trim();
+   if(!name){toast('Введите название города перед утренним осмотром.');return;}
+   model.name=name.slice(0,30);
+  }
+  model.dialogueFlags=flags;
+  // Начальный капитал уже задан newGame(). Пролог применяет только сюжетные flags.
+  model.history.unshift({day:0,text:scene.title+': '+choice.label+(choice.consequences?' — '+choice.consequences:'')});
+  model.history=model.history.slice(0,100);
+  if(choice.next===null)model.started=flags.includes('prologue_complete')&&!flags.includes('bet_declined');
+  else model.scene=next;
+  save();render();window.scrollTo(0,0);return;
+ }
+ if(d.action==='rename'){model.name=document.getElementById('nameInput').value.trim()||model.name;save();render();return}
+ if(d.action==='reset'){if(confirm('Удалить прогресс этой версии и начать заново?')){model={version:1,game:newGame(),name:'Новая Надежда',scene:0,started:false,history:[],dialogueFlags:[],completedConversations:[],personalRelations:{anatoly:50}};save();render()}return}
+ const actions={repairService:()=>({type:'repairService',service:d.id}),dialogue:()=>({type:'dialogue',characterId:d.id,choice:d.choice}),repair:()=>({type:'repair',houseId:d.house,entrance:Number(d.entrance),step:d.step}),settle:()=>({type:'settle',houseId:d.house,entrance:Number(d.entrance)}),infrastructure:()=>({type:'infrastructure',service:d.id}),newHouse:()=>({type:'buildHouse'}),wait:()=>({type:'wait',days:Number(d.days)}),help:()=>({type:'help',characterId:d.id,choice:d.choice}),event:()=>({type:'event',eventId:d.id,choice:d.choice})};
+ if(actions[d.action])doAction(actions[d.action]());
+});
+document.getElementById('closeModal').onclick=()=>document.getElementById('modal').close();
+document.addEventListener('error',e=>{if(e.target instanceof HTMLImageElement){e.target.hidden=true;}},true);
+try{window.Telegram?.WebApp?.ready();window.Telegram?.WebApp?.expand()}catch{}
+render();
+</script></body></html>
