@@ -413,3 +413,184 @@ render();
 </script>
 </body>
 </html>
+<!--
+ПОРТРЕТ АНАТОЛИЯ
+Вставьте весь этот блок в самый конец index.html, после </html>.
+Он добавит портрет в знакомство, разговор о названии города,
+утренний осмотр, подсказки и предложение о переселении жителей.
+Остальной код менять не нужно.
+-->
+<script>
+(() => {
+  "use strict";
+
+  if (window.anatolyPortraitInstalled) return;
+  window.anatolyPortraitInstalled = true;
+
+  const IMAGE =
+    "https://raw.githubusercontent.com/korinecdanila-sys/City-game/main/IMG_20261120_104130_242.jpg";
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .anatoly-portrait {
+      margin: 0 0 18px;
+      overflow: hidden;
+      border: 1px solid #455348;
+      border-radius: 16px;
+      background: #000;
+    }
+
+    .anatoly-portrait__image {
+      display: block;
+      width: 100%;
+      height: clamp(220px, 40vh, 360px);
+      object-fit: contain;
+      background: #000;
+    }
+
+    .anatoly-portrait__caption {
+      padding: 12px 15px;
+      background: linear-gradient(110deg, #27352c, #19262b);
+      border-top: 1px solid #35483c;
+    }
+
+    .anatoly-portrait__name {
+      display: block;
+      color: #edbc77;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .anatoly-portrait__role {
+      display: block;
+      margin-top: 3px;
+      color: #b0bdb4;
+      font-size: 11px;
+    }
+
+    .anatoly-portrait--compact {
+      display: flex;
+      align-items: center;
+      background: #111a17;
+    }
+
+    .anatoly-portrait--compact .anatoly-portrait__image {
+      flex: 0 0 88px;
+      width: 88px;
+      height: 108px;
+      object-fit: contain;
+    }
+
+    .anatoly-portrait--compact .anatoly-portrait__caption {
+      flex: 1;
+      border: 0;
+      background: none;
+    }
+
+    .anatoly-portrait__fallback {
+      padding: 18px;
+      color: #b0bdb4;
+      font-size: 12px;
+      text-align: center;
+    }
+  `;
+  document.head.appendChild(style);
+
+  function addPortrait(container, compact = false) {
+    if (!container || container.querySelector(".anatoly-portrait")) return;
+
+    const figure = document.createElement("figure");
+    figure.className =
+      "anatoly-portrait" + (compact ? " anatoly-portrait--compact" : "");
+
+    const image = document.createElement("img");
+    image.className = "anatoly-portrait__image";
+    image.src = IMAGE;
+    image.alt = "Анатолий — бывший начальник городской котельной";
+    image.decoding = "async";
+
+    const caption = document.createElement("figcaption");
+    caption.className = "anatoly-portrait__caption";
+
+    const name = document.createElement("span");
+    name.className = "anatoly-portrait__name";
+    name.textContent = "Анатолий";
+
+    const role = document.createElement("span");
+    role.className = "anatoly-portrait__role";
+    role.textContent = "78 лет · бывший начальник котельной";
+
+    caption.append(name, role);
+    figure.append(image, caption);
+
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      const fallback = document.createElement("div");
+      fallback.className = "anatoly-portrait__fallback";
+      fallback.textContent = "Портрет временно недоступен";
+      figure.prepend(fallback);
+    }, { once: true });
+
+    container.prepend(figure);
+  }
+
+  function refreshPortraits() {
+    const storyCard = document.querySelector("#app .story .card");
+
+    if (storyCard) {
+      const title = storyCard.querySelector("h1")?.textContent.trim();
+
+      if ([
+        "Чай при свечах",
+        "У города должно быть имя",
+        "Не чинить всё сразу"
+      ].includes(title)) {
+        addPortrait(storyCard);
+      }
+    }
+
+    document.querySelectorAll("#app .adviser").forEach(card => {
+      const label = card.querySelector(".kicker")?.textContent || "";
+
+      if (label.includes("Анатолий")) {
+        addPortrait(card, true);
+      }
+    });
+
+    const conversation = document.getElementById("dialogContent");
+
+    if (conversation) {
+      const label = conversation.querySelector(".kicker")?.textContent || "";
+
+      if (label.includes("Анатолий")) {
+        addPortrait(conversation);
+      }
+    }
+  }
+
+  function start() {
+    refreshPortraits();
+
+    const observer = new MutationObserver(() => {
+      refreshPortraits();
+    });
+
+    const app = document.getElementById("app");
+    const dialogContent = document.getElementById("dialogContent");
+
+    if (app) {
+      observer.observe(app, { childList: true, subtree: true });
+    }
+
+    if (dialogContent) {
+      observer.observe(dialogContent, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
+</script>
