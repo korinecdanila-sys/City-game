@@ -111,13 +111,14 @@ nav button{position:relative}
 nav button.has-dot::after{content:'';position:absolute;top:4px;right:calc(50% - 16px);width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold)}
 
 .m3c.sel{outline:3px solid var(--gold);outline-offset:-3px}
+body{background:radial-gradient(circle at 15% 0%,#203946 0,#081219 42%,#050b0f 100%);background-attachment:fixed}#app{box-shadow:0 0 80px #0008;position:relative}.card{box-shadow:0 10px 28px #0002}.adviser{position:relative;overflow:hidden}.adviser:after{content:'✦';position:absolute;right:18px;top:10px;font-size:42px;color:#edbd7930}.story-card{background:linear-gradient(145deg,#1d3039,#14232b)}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head><body><div id="app"></div><div id="toast" role="status" hidden></div><dialog id="modal"><div id="modalContent"></div><button id="closeModal">Закрыть</button></dialog><noscript>Для игры нужен JavaScript.</noscript><script type="module">const E=(...args)=>escapeHTML(...args);
 // Standalone deterministic game rules. All currency is fictional; no I/O or payments.
 const SAVE_VERSION = 2;
 const SERVICES = Object.freeze(['power', 'water', 'heat', 'sewer', 'supply']);
 const PEOPLE = ['engineer', 'doctor', 'organizer'];
 const WEEK = 7 * 86400000;
-const START_MONEY = 260000;
+const START_MONEY = 115000;
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const FUELS = [.5, .3, .5, 1];
 const clone = value => structuredClone(value);
@@ -682,13 +683,27 @@ const CHARACTERS = [
 ];
 
 const STORY = [{
+  id: 'anatoly_call', title: '«Я знаю, где раздобыть бабла»', speaker: 'Анатолий Зорин',
+  text: 'Телефон звонит, когда вы уже собираетесь закрыть ноутбук. «Алексей? Это Анатолий. Я знаю, где раздобыть бабла. Не такого, чтобы опять поверить в чудо, а настоящего — за работу». В бывшем Доме культуры лежит списанный генератор. Если вытащить его до аукциона, перекупщик заплатит.',
+  choices: [
+    { label: 'Взяться за срочную работу: разобрать генератор', next: 'money_job', effects: { money: 4500, flags: ['anatoly_money_plan'] }, consequences: 'Вы заработали $4 500 честной работой.' },
+    { label: 'Спросить, почему он помогает именно вам', next: 'money_job', effects: { money: 2500, flags: ['anatoly_money_plan', 'anatoly_trust_question'] }, consequences: 'Анатолий открывает личную причину.' }
+  ]
+}, {
+  id: 'money_job', title: 'Деньги не падают с неба', speaker: 'Анатолий Зорин',
+  text: 'До полудня вы таскаете кабель, чините замок и ведёте переговоры с охранником. Когда перекупщик отсчитывает купюры, Анатолий говорит: «Бабло — это возможность сделать следующий честный шаг. Потратишь на понты — город снова станет пустым».',
+  choices: [
+    { label: 'Отложить заработанное на первый ремонт и ехать на распродажу', next: 'auction', effects: { flags: ['earned_start_money', 'anatoly_mentor'] } },
+    { label: 'Выделить часть денег бывшей бригаде и ехать налегке', next: 'auction', effects: { money: -1500, flags: ['earned_start_money', 'paid_old_debt', 'anatoly_mentor'] }, severe: true, consequences: 'Вы платите часть старого долга бывшей бригаде.' }
+  ]
+},
   id: 'prelude',
   title: 'Три месяца без работы',
   speaker: 'Алексей Морозов',
   text: 'Месяц назад вы закрыли фирму. Не от лени и не от жадности — просто инвестор исчез вместе с деньгами, а вы остались с недоделанным домом, долгами и бригадой, которой должны зарплату. Вы отдали людям свои накопления, по одному погасили все расчёты и остались почти без средств, но с чистой совестью. Сегодня в газете объявление: распродают имущество бывшей конторы, в том числе ваш старый инструмент. Вы едете туда забрать свой уровень и заодно попробовать понять, что делать дальше.',
   choices: [
-    { label: 'Поехать сразу: пусть будет как будет', next: 'auction', effects: { flags: ['prelude_fast'] } },
-    { label: 'Сначала перечитать, что писали о вас в новостях', next: 'auction', effects: { flags: ['prelude_careful'], severe: true } },
+    { label: 'Поехать сразу: пусть будет как будет', next: 'anatoly_call', effects: { flags: ['prelude_fast'] } },
+    { label: 'Сначала перечитать, что писали о вас в новостях', next: 'anatoly_call', effects: { flags: ['prelude_careful'], severe: true } },
   ],
 },
   {
@@ -717,8 +732,8 @@ const STORY = [{
   },
   {
     id: 'terms', title: 'Цена года', speaker: 'Вера Соколова',
-    text: 'На столе последняя редакция. Северин предоставляет $200 000 стартового капитала на восстановление. За один год со дня подписания в городе должны постоянно жить 10 000 человек. Успех — $10 000 000 и передача городского имущественного комплекса вам с сохранением прав жильцов. Неудача — ваш личный долг $1 000 000 и предусмотренный договором снос, только после законных процедур, расселения и проверки обжалований. Регистрации на бумаге не считаются; проверка независимая. «Миллион долга не исчезнет от того, что вы очень старались», — говорит Вера.',
-    contract: { initialCapital: 200000, abandonedYears: 20, targetResidents: 10000, durationYears: 1, successPrize: 10000000, successProperty: 'Городской имущественный комплекс с действующими правами жильцов', failurePersonalDebt: 1000000, failureDemolition: true, demolitionRequires: ['Законная процедура', 'Предоставленное расселение', 'Рассмотрение обжалований'], residencyVerification: 'Фактическое постоянное проживание, независимый аудит' },
+    text: 'На столе последняя редакция. Северин предоставляет $115 000 стартового капитала на восстановление. За один год со дня подписания в городе должны постоянно жить 10 000 человек. Успех — $10 000 000 и передача городского имущественного комплекса вам с сохранением прав жильцов. Неудача — ваш личный долг $1 000 000 и предусмотренный договором снос, только после законных процедур, расселения и проверки обжалований. Регистрации на бумаге не считаются; проверка независимая. «Миллион долга не исчезнет от того, что вы очень старались», — говорит Вера.',
+    contract: { initialCapital: 115000, abandonedYears: 20, targetResidents: 10000, durationYears: 1, successPrize: 10000000, successProperty: 'Городской имущественный комплекс с действующими правами жильцов', failurePersonalDebt: 1000000, failureDemolition: true, demolitionRequires: ['Законная процедура', 'Предоставленное расселение', 'Рассмотрение обжалований'], residencyVerification: 'Фактическое постоянное проживание, независимый аудит' },
     choices: [
       { label: 'Включить бесплатную эвакуацию и резерв на выезд', next: 'signature', effects: { flags: ['evacuation_reserve_priority'] }, severe: true, consequences: 'Обязательный бесплатный выезд фиксируется отдельно; резерв уменьшит свободные деньги на стройку.' },
       { label: 'Включить независимого оператора эвакуации', next: 'signature', effects: { flags: ['external_evacuation_operator'] }, severe: true, consequences: 'Бесплатный выезд обеспечивает перевозчик по договору; вы зависите от его графика и обязаны оплатить резерв.' },
@@ -728,8 +743,8 @@ const STORY = [{
     id: 'signature', title: 'Подпись без свидетелей чуда', speaker: 'Алексей Морозов',
     text: 'Северин проверяет дату. «Год начинается сегодня. Вы понимаете, что это не обещание инвестировать ещё?» Вы понимаете. Вера отдельно подтверждает: будущие жители не отвечают по вашему долгу, бесплатная эвакуация не зависит от пожертвований, покупок или согласия остаться. На последней странице оставлено место для вашей подписи.',
     choices: [
-      { label: 'Подписать и начать с небольшого пригодного квартала', next: 'arrival', effects: { money: 200000, flags: ['bet_signed', 'compact_start', 'free_evacuation_guaranteed'] }, severe: true, consequences: 'Вы принимаете все условия пари, получаете $200 000 и выбираете ограниченный первый фронт работ.' },
-      { label: 'Подписать и обследовать сразу несколько кварталов', next: 'arrival', effects: { money: 200000, flags: ['bet_signed', 'broad_survey', 'free_evacuation_guaranteed'] }, severe: true, consequences: 'Вы принимаете те же условия; широкий осмотр даст больше вариантов, но потребует больше времени специалистов.' },
+      { label: 'Подписать и начать с небольшого пригодного квартала', next: 'arrival', effects: { flags: ['bet_signed', 'compact_start', 'free_evacuation_guaranteed'] }, severe: true, consequences: 'Вы принимаете все условия пари, получаете $200 000 и выбираете ограниченный первый фронт работ.' },
+      { label: 'Подписать и обследовать сразу несколько кварталов', next: 'arrival', effects: { flags: ['bet_signed', 'broad_survey', 'free_evacuation_guaranteed'] }, severe: true, consequences: 'Вы принимаете те же условия; широкий осмотр даст больше вариантов, но потребует больше времени специалистов.' },
       { label: 'Не подписывать: личный долг слишком велик', next: null, effects: { flags: ['bet_declined', 'prologue_ended'] }, severe: true, consequences: 'Пари не начинается, капитал не перечисляется, долга нет. Это самостоятельный отказ, а не поражение за неправильный ответ.' },
     ],
   },
@@ -2151,14 +2166,17 @@ model.newsRead??=0;model.introduced.push(id);
  }
 }
 function dotFor(id){
- const s=model.game;
- if(!model.started)return '';
- if(id==='build'&&s.houses.some(h=>h.entrances.some(e=>e.stage<3)))return 'build';
- if(id==='people'&&(s.settlement.applicants||[]).length)return 'people';
- if(id==='quests'&&(model.questsDone||[]).length>=0&&availableQuests(s,model.questsDone||[]).filter(q=>s.characters[q.giver]?.met).length)return 'quests';
- return '';
+  const s=model.game;
+  if(!model.started)return '';
+  let actionable='build';
+  if(!s.settlement.firstBatchArrived && s.houses.some(h=>h.entrances.some(e=>e.stage===3)) && Math.min(...SERVICES.map(k=>s.infrastructure[k].capacity))>=130) actionable='city';
+  else if(s.houses.some(h=>h.entrances.some(e=>e.stage<3))) actionable='build';
+  else if((s.settlement.applicants||[]).length) actionable='people';
+  else if(Object.values(s.characters).some(c=>c.met&&(c.health==='injured'||c.health==='critical'))) actionable='people';
+  else if(availableQuests(s,model.questsDone||[]).some(q=>s.characters[q.giver]?.met)) actionable='quests';
+  return id===actionable?actionable:'';
 }
-function doRender(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><button class="bell" data-action="newsMenu" title="Уведомления" aria-label="Уведомления">🔔${(s.news||[]).length>model.newsRead?(s.news.length-model.newsRead):''}</button><button class="restart" data-action="resetMenu" title="Начать заново" aria-label="Начать заново">↺</button><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['quests','✦','Задания'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''} ${dotFor(id)===id?'has-dot':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
+function doRender(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><button class="bell" data-action="newsMenu" title="Уведомления" aria-label="Уведомления">🔔${(s.news||[]).length>model.newsRead?(s.news.length-model.newsRead):''}</button><button class="restart" data-action="resetMenu" title="Начать заново" aria-label="Начать заново">↺</button><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():tab==='quests'?questsView():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['quests','✦','Задания'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''} ${dotFor(id)===id?'has-dot':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;const d=b.dataset;
  if(d.action==='tab'){tab=d.id;render(true);window.scrollTo(0,0);return}
  const QUEST_MINI={'anatoly_cellar':'pipes','ilya_night':'wires','darya_shift':'riddle','marina_move':'memory'};
@@ -2246,7 +2264,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');
    if(!name){toast('Введите название города перед утренним осмотром.');return;}
    model.name=name.slice(0,30);
   }
-  model.dialogueFlags=flags;
+  model.dialogueFlags=flags; const storyMoney=Number(choice.effects?.money||0); if(storyMoney>0){model.game.money+=storyMoney;model.game.ledger.income+=storyMoney;} if(storyMoney<0){const charge=Math.min(model.game.money,-storyMoney);model.game.money-=charge;model.game.ledger.expenses+=charge;}
   // Начальный капитал уже задан newGame(). Пролог применяет только сюжетные flags.
   model.history.unshift({day:0,text:scene.title+': '+choice.label});
   model.history=model.history.slice(0,100);
