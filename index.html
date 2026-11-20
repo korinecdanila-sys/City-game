@@ -594,3 +594,339 @@ render();
   }
 })();
 </script>
+<!--
+Замените предыдущий блок сезонных изображений этим блоком.
+Не оставляйте одновременно несколько сезонных скриптов.
+
+Каждый сезон длится 7 РЕАЛЬНЫХ суток:
+весна → лето → осень → зима → повторение.
+
+Отсчёт начинается при первом запуске этой версии города.
+Дата начала сохраняется вместе с игровым прогрессом.
+
+Расходы котельной:
+                   Зима    Весна/осень    Лето
+Капитальная        $300       $150        $90
+Временная          $450       $225        $135
+
+Летом расходы ниже зимних на 70%, весной и осенью — на 50%.
+Это расходы за игровой день: реальное время меняет сезон,
+но деньги за время отсутствия игрока не списываются.
+
+В этой версии игры топливо отдельно не учитывается:
+расходы на котельную включены в денежное содержание города.
+-->
+
+<script>
+(() => {
+  "use strict";
+
+  if (window.realWeekSeasonsInstalled) return;
+
+  if (
+    typeof state === "undefined" ||
+    typeof save !== "function" ||
+    typeof expense !== "function" ||
+    typeof render !== "function"
+  ) {
+    console.error("Сезоны: разместите блок после основного скрипта игры.");
+    return;
+  }
+
+  window.realWeekSeasonsInstalled = true;
+
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+  const BASE =
+    "https://raw.githubusercontent.com/korinecdanila-sys/City-game/main/";
+
+  const SEASONS = [
+    {
+      name: "Весна",
+      file: "город.jpg",
+      factor: 0.5,
+      saving: 50
+    },
+    {
+      name: "Лето",
+      file: "город.jpg",
+      factor: 0.3,
+      saving: 70
+    },
+    {
+      name: "Осень",
+      file: "город.jpg",
+      factor: 0.5,
+      saving: 50
+    },
+    {
+      name: "Зима",
+      file: "зимний город.jpg",
+      factor: 1,
+      saving: 0
+    }
+  ];
+
+  const originalExpense = expense;
+  const originalRender = render;
+
+  function ensureStart() {
+    const now = Date.now();
+
+    if (
+      !Number.isFinite(state.seasonStartedAt) ||
+      state.seasonStartedAt <= 0
+    ) {
+      state.seasonStartedAt = now;
+      save();
+    }
+
+    return state.seasonStartedAt;
+  }
+
+  function seasonInfo() {
+    const start = ensureStart();
+    const elapsed = Math.max(0, Date.now() - start);
+    const weeks = Math.floor(elapsed / WEEK);
+    const index = weeks % SEASONS.length;
+
+    return {
+      ...SEASONS[index],
+      index,
+      nextName: SEASONS[(index + 1) % SEASONS.length].name,
+      remaining: WEEK - (elapsed % WEEK)
+    };
+  }
+
+  function boilerExpense(season = seasonInfo()) {
+    const boiler = state.jobs && state.jobs.heat;
+
+    // Без котельной или до заселения расходы не начисляются.
+    if (!boiler || !(state.population > 1)) return 0;
+
+    const winterCost = boiler.quality ? 300 : 450;
+
+    return Math.round(winterCost * season.factor);
+  }
+
+  /*
+  Основная игра уже включала $150 за временное отопление.
+  Убираем этот старый расход, чтобы не посчитать его дважды,
+  и добавляем полноценное сезонное содержание котельной.
+  */
+  expense = function seasonalExpense() {
+    const oldTotal = originalExpense();
+    const boiler = state.jobs && state.jobs.heat;
+
+    const oldHeatingCost =
+      state.population > 1 && boiler && !boiler.quality
+        ? 150
+        : 0;
+
+    return Math.max(
+      0,
+      oldTotal - oldHeatingCost + boilerExpense()
+    );
+  };
+
+  const style = document.createElement("style");
+  style.textContent = `
+    #app .art .real-season-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #172329;
+    }
+
+    #app .art .real-season-image[hidden],
+    #app .art svg[hidden] {
+      display: none !important;
+    }
+
+    #app .art .art-caption {
+      z-index: 2;
+      max-width: calc(100% - 28px);
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: rgba(10, 19, 25, .84);
+      color: #f0f3ed;
+      font-size: 11px;
+      letter-spacing: .4px;
+      pointer-events: none;
+    }
+
+    .real-season-panel {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #425760;
+      border-radius: 12px;
+      background: #192b33;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .real-season-panel strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #edbc77;
+    }
+
+    .real-season-panel small {
+      display: block;
+      margin-top: 5px;
+      color: #aebfc5;
+    }
+  `;
+  document.head.appendChild(style);
+
+  function timeLeft(ms) {
+    const hours = Math.max(1, Math.ceil(ms / 3600000));
+    const days = Math.floor(hours / 24);
+    const rest = hours % 24;
+
+    return days
+      ? `${days} дн.${rest ? ` ${rest} ч.` : ""}`
+      : `${hours} ч.`;
+  }
+
+  function updateImages(season) {
+    document.querySelectorAll("#app .art").forEach(container => {
+      const caption = container.querySelector(".art-caption");
+
+      if (caption) {
+        const text =
+          `${season.name} · смена сезона через ${timeLeft(season.remaining)}`;
+
+        if (caption.textContent !== text) {
+          caption.textContent = text;
+        }
+      }
+
+      let image = container.querySelector(".real-season-image");
+
+      if (image && image.dataset.file === season.file) return;
+
+      if (image) image.remove();
+
+      const fallback = container.querySelector("svg");
+      if (fallback) fallback.removeAttribute("hidden");
+
+      image = document.createElement("img");
+      image.className = "real-season-image";
+      image.dataset.file = season.file;
+      image.alt = season.index === 3
+        ? "Зимний город"
+        : "Панорама города";
+      image.decoding = "async";
+      image.hidden = true;
+
+      image.addEventListener("load", () => {
+        if (!image.isConnected) return;
+
+        image.hidden = false;
+        if (fallback) fallback.setAttribute("hidden", "");
+      }, { once: true });
+
+      image.addEventListener("error", () => {
+        if (!image.isConnected) return;
+
+        image.hidden = true;
+        if (fallback) fallback.removeAttribute("hidden");
+      }, { once: true });
+
+      container.appendChild(image);
+      image.src = BASE + encodeURIComponent(season.file);
+    });
+  }
+
+  function updatePanel(season) {
+    const header = document.querySelector("#app > header");
+    if (!header) return;
+
+    let panel = header.querySelector(".real-season-panel");
+
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.className = "real-season-panel";
+      panel.setAttribute("aria-label", "Сезон и расходы котельной");
+      header.appendChild(panel);
+    }
+
+    const boiler = state.jobs && state.jobs.heat;
+    const cost = boilerExpense(season);
+
+    let heatingText;
+
+    if (!boiler) {
+      heatingText = "Котельная ещё не восстановлена.";
+    } else if (!(state.population > 1)) {
+      heatingText = "Котельная готова. Расходы начнутся после заселения.";
+    } else {
+      heatingText =
+        `Котельная: $${cost.toLocaleString("ru-RU")} за игровой день.`;
+    }
+
+    const loadText = season.saving
+      ? `Расходы на отопление ниже зимних на ${season.saving}%.`
+      : "Котельная работает с полной зимней нагрузкой.";
+
+    const html = `
+      <strong>${season.name} · следующий сезон: ${season.nextName}</strong>
+      <div>Смена через ${timeLeft(season.remaining)} реального времени.</div>
+      <div>${heatingText}</div>
+      <small>${loadText}</small>
+      <small>Сезон длится 7 реальных суток. Списание — только за игровые дни.</small>
+    `;
+
+    if (panel.innerHTML !== html) panel.innerHTML = html;
+  }
+
+  function updateHeatingDescriptions() {
+    document.querySelectorAll("#app [data-action='build'][data-id='heat']")
+      .forEach(button => {
+        const description = button.querySelector("small");
+        if (!description) return;
+
+        description.textContent = button.dataset.option === "0"
+          ? "3 дн. · Капитальная котельная. Содержание после заселения: $90 летом, $150 весной и осенью, $300 зимой за игровой день."
+          : "1 дн. · Временный контур. Содержание после заселения: $135 летом, $225 весной и осенью, $450 зимой за игровой день. Для расширения нужна модернизация.";
+      });
+  }
+
+  function updateSeasonUI() {
+    const season = seasonInfo();
+    updateImages(season);
+    updatePanel(season);
+    updateHeatingDescriptions();
+    return season.index;
+  }
+
+  let displayedSeason = null;
+
+  render = function renderWithSeasons() {
+    ensureStart();
+    const result = originalRender.apply(this, arguments);
+    displayedSeason = updateSeasonUI();
+    return result;
+  };
+
+  function refreshClock() {
+    if (document.hidden) return;
+
+    const season = seasonInfo();
+
+    // Полная перерисовка нужна только при смене сезона:
+    // так обновляется и сумма содержания города.
+    if (displayedSeason !== season.index) {
+      render();
+    } else {
+      updateSeasonUI();
+    }
+  }
+
+  document.addEventListener("visibilitychange", refreshClock);
+  window.addEventListener("focus", refreshClock);
+  window.setInterval(refreshClock, 60000);
+
+  render();
+})();
+</script>
