@@ -37,6 +37,21 @@ button:active:not(:disabled){transform:scale(.975)}
 .dialogue-choice:nth-child(4){animation-delay:.15s}
 .fade-out{opacity:0;transition:opacity .16s ease}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Аккуратная кнопка «начать заново» */
+.restart{flex:0 0 auto;width:30px;height:30px;padding:0;border-radius:50%;border:1px solid #3c5158;background:#1b2a30;color:#9fb4bb;font-size:15px;line-height:1;display:inline-flex;align-items:center;justify-content:center;margin-left:auto;margin-right:8px}
+.restart:hover{border-color:#8a6b45;color:var(--gold);background:#22353c}
+.restart:active{transform:scale(.92)}
+
+.bell{flex:0 0 auto;width:30px;height:30px;padding:0;border-radius:50%;border:1px solid #3c5158;background:#1b2a30;color:#c9d8de;font-size:13px;line-height:1;display:inline-flex;align-items:center;justify-content:center;position:relative}
+.bell:hover{border-color:#8a6b45;background:#22353c}
+
+/* Лента новостей */
+.news-list{display:grid;gap:10px}
+.news-item{padding:10px 0;border-bottom:1px solid #2c3f46}
+.news-item:last-child{border-bottom:0}
+.news-item p{font:14px/1.45 system-ui,sans-serif;color:#dde5da;margin:4px 0 0}
+.news-day{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#c9a06a}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head><body><div id="app"></div><div id="toast" role="status" hidden></div><dialog id="modal"><div id="modalContent"></div><button id="closeModal">Закрыть</button></dialog><noscript>Для игры нужен JavaScript.</noscript><script type="module">const E=(...args)=>escapeHTML(...args);
 // Standalone deterministic game rules. All currency is fictional; no I/O or payments.
 const SAVE_VERSION = 2;
@@ -79,6 +94,7 @@ function newGame(now = Date.now()) {
     seed: now % 2147483647,
     // Дневной цикл: день закрывается действиями, а не кнопкой.
     dayState: {actionsLeft: 2, questsDone: [], talkedTo: [], adSkipUsed: false},
+    news: [],
   };
 }
 /** Structural and cross-field validation, not authentication: local saves are user-editable. */
@@ -177,6 +193,13 @@ function spend(s, amount) {
 }
 function earn(s, amount) { s.money += amount; s.ledger.income += amount; }
 function relations(s, delta) { for (const p of Object.values(s.characters)) if (p.health !== 'dead') p.relation = Math.max(0, Math.min(100, p.relation + delta)); }
+function news(s, text) {
+  const last = s.news[0];
+  if (last && last.day === s.day && last.text === text) return;
+  s.news.unshift({day: s.day, text});
+  s.news = s.news.slice(0, 60);
+}
+
 function addEvent(s, id, kind, title, effects) {
   if (!s.events.some(e => e.id === id)) { s.events.push({id, kind, title, day: s.day, resolved: false, choice: null}); effects.push(`Новое событие: ${title}`); }
 }
@@ -204,14 +227,22 @@ function tick(s, days, now, effects) {
   for (let i = 0; i < days && s.status === 'playing'; i++) {
     s.day++;
     const expense = Math.ceil(SERVICES.reduce((total, k) => total + s.infrastructure[k].level * (120 + (k === 'heat' ? 30 * season(s, now).fuelMultiplier : 30)), 0)) + (s.disruption ? 100 : 0) + s.houses.reduce((sum, h) => sum + h.entrances.filter(e => e.stage === 3 && e.residents === 0).length * 10, 0);
-    earn(s, s.population * 16);
+    const dayIncome = s.population * 16;
+    earn(s, dayIncome);
     if (s.money < expense) { spend(s, s.money); s.status = 'lost'; effects.push('Банкротство: не удалось оплатить ежедневные расходы.'); }
-    else spend(s, expense);
+    else { spend(s, expense); news(s, `Заработано $${dayIncome.toLocaleString('ru-RU')}, на содержание города ушло $${expense.toLocaleString('ru-RU')}.`); }
     for (const p of Object.values(s.characters)) if (p.dueDay !== null && s.day >= p.dueDay) {
       if (p.health === 'injured') { p.health = 'critical'; p.dueDay = s.day + 3; effects.push(`${p.name}: критическое состояние.`); }
       else { p.health = 'dead'; p.dueDay = null; effects.push(`${p.name}: погиб без помощи.`); relations(s, -10); }
     }
     generateApplicants(s, effects);
+    // Нехватка людей: кто-то болеет — на работах не хватает рук.
+    for (const p of Object.values(s.characters)) {
+      if (p.met && (p.health === 'injured' || p.health === 'critical')) {
+        news(s, `${p.name} не может работать: нужна замена или помощь.`);
+        break;
+      }
+    }
     // Если есть готовое пустое жильё и ждут заявки — люди начинают заселяться.
     if (s.settlement.applicants.length && s.day % 2 === 0) {
       for (const a of [...s.settlement.applicants]) {
@@ -262,6 +293,7 @@ function pushApplicant(s, effects) {
     kind: payer,
     note: payer === 'buy' ? 'Готовы купить квартиру' : 'Приехали бы бесплатно, с работой помогут'
   });
+  news(s, 'Появились желающие заселиться — посмотрите заявки.');
   effects.push('Появились желающие заселиться. Посмотрите, кто просится в город.');
 }
 
@@ -436,6 +468,7 @@ function act(state, action, now = Date.now()) {
         const slots = flightSlots(s);
         requireRule(slots >= batch, 'CAPACITY', `Нужна свободная мощность инфраструктуры хотя бы на ${batch} человек.`);
         s.settlement.arriving.push({houseId: house.id, entrance: action.entrance, total: batch, arrived: 0, first: isFirst, day: s.day});
+        news(s, `Приглашены жители: ${batch} человек прибудут партиями.`);
         effects.push(isFirst
           ? 'Приглашение передано. Первые 130 человек поедут к вам, начнут устраиваться и заселятся постепенно.'
           : 'Приглашение отправлено: по мере дел и жилья люди приезжают партиями.');
@@ -452,6 +485,7 @@ function act(state, action, now = Date.now()) {
       requireRule(a, 'INVALID_ACTION', 'Заявка не найдена.');
       s.settlement.applicants = s.settlement.applicants.filter(x => x.id !== a.id);
       relations(s, -1);
+      news(s, 'Вы отказали семье в заселении.');
       effects.push('Вы отказали семье. Слух о городе стал хуже.');
     } else if (action.type === 'dialogue') {
       requireRule(PEOPLE.includes(action.characterId) && ['listen', 'dismiss'].includes(action.choice), 'INVALID_ACTION', 'Неверный диалог.');
@@ -465,11 +499,14 @@ function act(state, action, now = Date.now()) {
     } else if (action.type === 'meetBatch') {
       // Первая партия: 130 человек и пятеро ключевых с именами.
       requireRule(!s.settlement.firstBatchArrived, 'ALREADY_RESOLVED', 'Первая партия уже приехала.');
-      requireRule(freeCapacity(s) >= 130, 'CAPACITY', 'Нет свободной мощности на 130 человек.');
+      const readySeats = s.houses.reduce((n, h) => n + h.entrances.filter(e => e.stage === 3).reduce((m, e) => m + (130 - e.residents), 0), 0);
+      requireRule(readySeats >= 40, 'CAPACITY', 'Сначала подготовьте хотя бы один подъезд: людям нужны готовые комнаты и работающая вода, свет и тепло.');
+      requireRule(freeCapacity(s) >= 130, 'CAPACITY', 'Не хватает мощности инфраструктуры на 130 человек. Увеличьте системы города.');
       s.settlement.firstBatchArrived = true;
       for (const id of ['engineer', 'doctor', 'organizer']) if (s.characters[id]) s.characters[id].met = true;
       s.population += 0; // люди приезжают партиями через заселение
       s.settlement.arriving.push({houseId: null, entrance: null, total: 130, arrived: 0, first: true, day: s.day, batch: 'first'});
+      news(s, 'Приехала первая партия из общежития: 130 человек.');
       effects.push('Приехали 130 человек из общежития. Среди них — электрик, врач и старшая по дому.');
     } else if (action.type === 'quest') {
       effects.push('Задание решено. Ушло одно действие дня.');
@@ -1388,6 +1425,46 @@ function conditionMet(state, expr) {
   return m ? Number(state.population) >= Number(m[1]) : false;
 }
 
+// Сцены знакомства второй волны: короткие, но с характером.
+const LATER_MEETINGS = {
+  lawyer: { name: 'Вера Соколова', role: 'юрист', lines: [
+    'Женщина в аккуратном пальто ставит сумку и сразу достаёт папку.',
+    '«Вера Соколова. Я здесь не по доброте. Мне нужно вживую посмотреть договор, по которому вы сюда приехали. Если с ним всё в порядке — останусь».'
+  ]},
+  inspector: { name: 'Михаил Громов', role: 'инспектор', lines: [
+    'Мужчина не здоровается первым, а сначала смотрит на один дом, потом на другой.',
+    '«Я подписываю акты. Если в дом нельзя заселять, я не подпишу. Но и тянуть не буду: люди ждут. Покажите, что уже готово».'
+  ]},
+  teacher: { name: 'Светлана Руденко', role: 'учительница', lines: [
+    'Светлана приехала с матерью и подростком, в руках коробка с учебниками.',
+    '«Дети не могут ждать, пока город встанет на ноги. Мне нужно помещение — любое, хоть бывший магазин. Обещаете?»'
+  ]},
+  librarian: { name: 'Нина Воронцова', role: 'библиотекарь', lines: [
+    'Пожилая женщина входит медленно и долго оглядывается, будто узнаёт места.',
+    '«Здесь был читальный зал. Я в нём работала. Если вы не собираетесь ставить на этом месте склад, я останусь».'
+  ]},
+  driver: { name: 'Сергей Баранов', role: 'водитель', lines: [
+    'Сергей выходит из старого автобуса, который сам же и привёл.',
+    '«Транспорта у вас нет. У меня есть развалина и руки. Скажите прямо: платить будете — или только спасибо?»'
+  ]},
+  workshop: { name: 'Роман Лисицин', role: 'хозяин мастерской', lines: [
+    'Роман обходит двор, пинает доску и одобрительно кивает.',
+    '«Дерево тут хорошее. Дайте помещение и дорогу для грузовиков — будет работа. Только без “потом разберёмся”, я на этом уже горел».'
+  ]},
+  journalist: { name: 'Алина Нестерова', role: 'журналистка', lines: [
+    'Алина держит диктофон и сразу включает его.',
+    '«Не волнуйтесь, выключу, если попросите. Но я пишу про ваш пари. Горожане имеют право знать цену вашего проигрыша».'
+  ]},
+  partner: { name: 'Павел Ершов', role: 'инженер водоснабжения', lines: [
+    'Павел приезжает с ящиком для проб воды.',
+    '«Вода у вас есть. Вопрос — какая. Я не буду докладывать “всё хорошо”, если в лаборатории будет плохо. Такой порядок подойдёт?»'
+  ]}
+};
+
+function laterMeeting(id) {
+  return LATER_MEETINGS[id] || null;
+}
+
 const ASSET_BASE='https://raw.githubusercontent.com/korinecdanila-sys/City-game/main/';
 const file=name=>ASSET_BASE+encodeURIComponent(name+'.jpeg');
 /** Portraits provided by the user in City-game repository. */
@@ -1437,6 +1514,8 @@ const restored=readSave(storage,validateSave,migrateSave);
 let model=restored.data||{version:1,game:newGame(),name:'Новая Надежда',scene:0,started:false,history:[],dialogueFlags:[]};
 model.completedConversations??=[];
 model.lastChoice??=null;
+model.introduced??=[];
+model.newsRead??=0;
 model.questsDone??=[];
 model.items??=[];
 model.personalRelations??={anatoly:50};
@@ -1491,7 +1570,7 @@ const serviceNames={power:'Электроснабжение',water:'Вода',he
 function save(){if(!writeSave(storage,model))warning='Сохранение недоступно: не закрывайте страницу.';}
 function toast(text){const el=document.getElementById('toast');el.textContent=text;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,4500);}
 function button(text,action,attrs='',primary=false){return `<button class="${primary?'primary ':''}full" data-action="${action}" ${attrs}>${text}</button>`;}
-function doAction(action){const result=act(model.game,action,Date.now());if(!result.ok){toast(result.error?.message||'Действие недоступно');return;}model.game=result.state;model.history.unshift(...result.effects.map(text=>({day:model.game.day,text})));model.history=model.history.slice(0,100);save();render();if(result.effects.length)toast(result.effects[0]);}
+function doAction(action){const result=act(model.game,action,Date.now());if(!result.ok){toast(result.error?.message||'Действие недоступно');return;}model.game=result.state;model.history.unshift(...result.effects.map(text=>({day:model.game.day,text})));model.history=model.history.slice(0,100);save();render();checkLaterArrivals();if(result.effects.length)toast(result.effects[0]);}
 function art(){return cityImage(['spring','summer','autumn','winter'][season(model.game).index]||'spring');}
 function speakerPortrait(name){return ['Анатолий','Анатолий Зорин','Виктор Северин','Илья Белов','Дарья Ким','Марина Белова','Тимур Хасанов','Светлана Руденко','Сергей Баранов','Павел Ершов','Елена Хасанова','Алина Нестерова'].includes(String(name))?portrait(String(name).startsWith('Анатолий')?'Анатолий':String(name)):'';}
 function intro(){
@@ -1507,9 +1586,28 @@ function intro(){
 }
 function overview(){const s=model.game;const ready=s.houses.flatMap(h=>h.entrances).filter(e=>e.stage===3).length;return `<section class="card adviser">${portrait()}<div class="kicker">Анатолий · следующий шаг</div><h2>${s.population?'У города появились люди':'Начнём с одного подъезда'}</h2><p>${s.population?'Следите за резервом мощности, расходами и здоровьем людей. Не нужно подключать пустые дома без плана.':'Расчистите подъезд, восстановите его и подключите пять основных систем. Затем пригласите первую группу из общежития.'}</p><div class="clear"></div>${button('Открыть план работ →','tab','data-id="build"',true)}</section>${!s.settlement.firstBatchArrived?`<section class="card adviser"><div class="kicker">Первая партия</div><h2>130 человек из общежития</h2>
  <p>Марина прислала список. Люди готовы ехать, но им нужны готовые комнаты и работающая вода, свет и тепло.</p>
+ <p><small>${(()=>{const seats=s.houses.reduce((n,h)=>n+h.entrances.filter(e=>e.stage===3).reduce((m,e)=>m+(130-e.residents),0),0);const cap=Math.min(...['power','water','heat','sewer','supply'].map(k=>s.infrastructure[k].capacity));const need=[];if(seats<40)need.push('подготовьте хотя бы один подъезд (сейчас мест: '+seats+')');if(cap<130)need.push('поднимите мощность систем до 130 (сейчас: '+cap+')');return need.length?'Нужно: '+need.join(', '):'Всё готово — можно встречать.';})()}</small></p>
  ${button('Встретить первую партию','meetBatch','',true)}</section>`:''}
  ${adCard('money','Выплата в казну раз в день','Поддержите проект и получите $3 000 один раз за сутки.')}${art()}<section class="card"><h3>Ваш город</h3><p>Домов: ${s.houses.length}. Готовых подъездов: ${ready}. Население: ${s.population}.</p><p>Цель: ${s.target} жителей до конца 365-го дня.</p><small>Доход за всё время: ${currency(s.ledger.income)} · расходы: ${currency(s.ledger.expenses)}. Содержание идёт при игровых действиях, не во время отсутствия.</small></section>${s.dayState.actionsLeft > 0 ? button(`Действий сегодня: ${s.dayState.actionsLeft}`, 'noop', 'disabled') : button('Пропустить день за рекламу', 'adSkip')}`;}
-function construction(){const s=model.game;return `<section class="card adviser"><h2>План восстановления</h2><p>Работайте по порядку: расчистка → ремонт → подключение. Пустые подключённые мощности тоже требуют содержания. Кнопка выполняет указанную работу.</p></section>${s.houses.map(h=>`<section class="card"><h3>Дом ${E(h.id)}</h3>${h.entrances.map((e,i)=>{const labels=['Расчистить · $1 500','Отремонтировать · $8 000','Подключить · $1 500'];return `<div class="card"><strong>Подъезд ${i+1}</strong><p>${['Аварийный','Расчищен','Отремонтирован','Готов к заселению'][e.stage]} · жителей: ${e.residents}/130</p>${e.stage<3?button(labels[e.stage],'repair',`data-house="${h.id}" data-entrance="${i}" data-step="${['clear','repair','connect'][e.stage]}"`,true):e.residents?'<span class="badge">Заселён</span>':button(s.firstArrivalClaimed?'Пригласить жителей':'Пригласить 130 жителей общежития','settle',`data-house="${h.id}" data-entrance="${i}"`,true)}</div>`}).join('')}</section>`).join('')}${adCard('extraAction','Ещё одно действие сегодня','Иногда дня не хватает. Один дополнительный шаг за просмотр.')}<section class="card"><h3>Следующий дом</h3><p>Можно начать заранее, но сначала оцените свободное жильё и резерв инфраструктуры.</p>${button('Начать следующий дом · $12 000','newHouse')}</section><h2>Инфраструктура</h2>${Object.entries(s.infrastructure).map(([id,x])=>`<section class="card"><h3>${serviceNames[id]}</h3><p>Уровень ${x.level} · мощность ${x.capacity} жителей · штат ${x.staff}.</p>${x.damaged?'<p class="danger">Авария: новое заселение остановлено.</p>'+button('Восстановить систему · $3 000','repairService',`data-id="${id}"`,true):button('Увеличить мощность · $20 000','infrastructure',`data-id="${id}"`)}</section>`).join('')}`;}
+function tutorialStep(s){
+  const e0=s.houses[0].entrances[0];
+  if(e0.stage===0)return {step:'clear',title:'Шаг 1 из 4 · расчистка',text:'В подъезде мусор и разбитые двери. Начните с расчистки — без этого бригада не войдёт внутрь.'};
+  if(e0.stage===1)return {step:'repair',title:'Шаг 2 из 4 · ремонт',text:'Теперь сам ремонт: стены, лестница, двери. Дороже всего, но без него жить нельзя.'};
+  if(e0.stage===2)return {step:'connect',title:'Шаг 3 из 4 · подключение',text:'Подведите воду, свет и тепло. Люди не приедут в холодные квартиры.'};
+  const power=s.infrastructure.power.level;
+  if(power===0)return {step:'infrastructure',title:'Шаг 4 из 4 · инфраструктура',text:'Без мощности город не примет больше людей. Увеличьте системы хотя бы по одному разу.'};
+  return null;
+}
+function construction(){const s=model.game;const tut=tutorialStep(s);
+ if(tut){
+   const e0=s.houses[0].entrances[0];
+   const btn=tut.step==='infrastructure'
+     ? button('Увеличить мощность · $20 000','infrastructure','data-id="power"',true)
+     : button('Выполнить: '+(tut.step==='clear'?'расчистить':tut.step==='repair'?'отремонтировать':'подключить'),'repair',`data-house="h1" data-entrance="0" data-step="${tut.step}"`,true);
+   return `<section class="card adviser"><div class="kicker">Обучение</div><h2>${E(tut.title)}</h2><p>${E(tut.text)}</p>${btn}
+   <p><small>Пока обучение не закончено, остальные работы скрыты, чтобы вы не запутались.</small></p></section>`;
+ }
+ return `<section class="card adviser"><h2>План восстановления</h2><p>Работайте по порядку: расчистка → ремонт → подключение. Пустые подключённые мощности тоже требуют содержания. Кнопка выполняет указанную работу.</p></section>${s.houses.map(h=>`<section class="card"><h3>Дом ${E(h.id)}</h3>${h.entrances.map((e,i)=>{const labels=['Расчистить · $1 500','Отремонтировать · $8 000','Подключить · $1 500'];return `<div class="card"><strong>Подъезд ${i+1}</strong><p>${['Аварийный','Расчищен','Отремонтирован','Готов к заселению'][e.stage]} · жителей: ${e.residents}/130</p>${e.stage<3?button(labels[e.stage],'repair',`data-house="${h.id}" data-entrance="${i}" data-step="${['clear','repair','connect'][e.stage]}"`,true):e.residents?'<span class="badge">Заселён</span>':button(s.firstArrivalClaimed?'Пригласить жителей':'Пригласить 130 жителей общежития','settle',`data-house="${h.id}" data-entrance="${i}"`,true)}</div>`}).join('')}</section>`).join('')}${adCard('extraAction','Ещё одно действие сегодня','Иногда дня не хватает. Один дополнительный шаг за просмотр.')}<section class="card"><h3>Следующий дом</h3><p>Можно начать заранее, но сначала оцените свободное жильё и резерв инфраструктуры.</p>${button('Начать следующий дом · $12 000','newHouse')}</section><h2>Инфраструктура</h2>${Object.entries(s.infrastructure).map(([id,x])=>`<section class="card"><h3>${serviceNames[id]}</h3><p>Уровень ${x.level} · мощность ${x.capacity} жителей · штат ${x.staff}.</p>${x.damaged?'<p class="danger">Авария: новое заселение остановлено.</p>'+button('Восстановить систему · $3 000','repairService',`data-id="${id}"`,true):button('Увеличить мощность · $20 000','infrastructure',`data-id="${id}"`)}</section>`).join('')}`;}
 function people(){const s=model.game;return `${conversationView()}${conversationList()}<section class="card"><h2>Семьи города</h2><p>Домохозяйств: ${s.households.length}. Взрослых работников: ${s.households.reduce((n,h)=>n+h.workers,0)}. Детей: ${s.households.reduce((n,h)=>n+h.children,0)}.</p><small>Каждая семья имеет адрес и занимает место в конкретном подъезде. Численность проверяется при каждом действии.</small></section><section class="card"><h2>Жители и специалисты</h2><p>При травме отсчёт идёт в игровых днях. До ожидания или строительства сначала проверьте, кому нужна помощь.</p></section>${Object.entries(s.characters).filter(([,c])=>c.met).map(([id,c])=>`<section class="card ${['injured','critical'].includes(c.health)?'danger':''}">${portrait(c.name)}<h3>${E(c.name)}</h3><p>Отношение: ${c.relation}/100 · состояние: ${E({healthy:'здоров',injured:'травмирован',critical:'критическое',dead:'погиб'}[c.health]||c.health)}${c.dueDay!==null?' · следующий срок: день '+c.dueDay:''}</p>${c.health==='healthy'&&!c.dialogueDone?'<blockquote>«До начала работ хочу обсудить условия и безопасность. Вы готовы меня выслушать?»</blockquote>'+button('Выслушать · отношения +5 · 1 день','dialogue',`data-id="${id}" data-choice="listen"`,true)+button('Отмахнуться · отношения −10 · 1 день','dialogue',`data-id="${id}" data-choice="dismiss"`):''}${['injured','critical'].includes(c.health)?['free','medical','refuse'].map((choice,i)=>button(['Организовать бесплатную помощь · 1 день','Медицинская помощь · $2 000','Отказаться от помощи'][i],'help',`data-id="${id}" data-choice="${choice}"`,i===0)).join('<br>'):''}</section>`).join('')}${adCard('heal','Помощь повреждённому специалисту','Если кто-то пострадал, помощь можно вызвать быстрее.')}<h2>Справочник персонажей истории</h2><p>Эти 16 биографий — сюжетный справочник. Не все персонажи активны в игровом движке; действующие состояния и помощь показаны в карточках выше.</p>${CHARACTERS.filter(ch=>!s.characters[Object.keys(s.characters).find(k=>s.characters[k].name===ch.name)]||s.characters[Object.keys(s.characters).find(k=>s.characters[k].name===ch.name)]?.met).map(c=>`<section class="card">${portrait(c.name)}<h3>${E(c.name)}</h3><small>${E(c.role)}</small><p>${E(c.background)}</p>${BIRTHDAYS[c.name]?`<p><small>День рождения: ${E(birthdayLabel(c.name))}. ${E(BIRTHDAYS[c.name].note)}</small></p>`:''}</section>`).join('')}`;}
 function events(){return model.game.events.filter(e=>!e.resolved).map(e=>{const choices=e.kind==='threat'?[['secure','Организовать охрану · 1 день'],['pay','Оплатить меры защиты · $5 000'],['ignore','Игнорировать: авария сети, травма Ильи, отношения −10; содержание +$100/день до ремонта']]:e.kind==='election'?[['community','Общественная программа · отношения +5'],['austerity','Жёсткая экономия · отношения −15']]:[['claim','Получить помощь']];return `<section class="card danger"><div class="kicker">Событие</div><h2>${E(e.title)}</h2>${choices.map(([value,label])=>button(label,'event',`data-id="${e.id}" data-choice="${value}"`)).join('<br>')}</section>`}).join('');}
 function questsView(){
@@ -1551,7 +1649,23 @@ function render(soft=false){
  }
  doRender();
 }
-function doRender(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['quests','✦','Задания'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
+function checkLaterArrivals(){
+ const s=model.game;
+ for(const [id,rule] of Object.entries(LATER_RULES)){
+   if(model.introduced?.includes(id))continue;
+   if(!conditionMet(s,rule.requires))continue;
+   model.introduced??=[];
+model.newsRead??=0;model.introduced.push(id);
+   const m=laterMeeting(id);
+   if(m){
+     const key=Object.keys(s.characters).find(k=>s.characters[k].name===m.name);
+     if(key)s.characters[key].met=true;
+     save();
+     setTimeout(()=>meetingModal([{id,...m}]),600);
+   }
+ }
+}
+function doRender(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><button class="bell" data-action="newsMenu" title="Уведомления" aria-label="Уведомления">🔔${(s.news||[]).length>model.newsRead?(s.news.length-model.newsRead):''}</button><button class="restart" data-action="resetMenu" title="Начать заново" aria-label="Начать заново">↺</button><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['quests','✦','Задания'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
 document.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b||b.disabled)return;const d=b.dataset;
  if(d.action==='tab'){tab=d.id;render(true);window.scrollTo(0,0);return}
  if(d.action==='questChoice'){
@@ -1572,7 +1686,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-acti
  }
  if(d.action==='meetBatch'){
    const res=act(model.game,{type:'meetBatch'},Date.now());
-   if(!res.ok){toast(res.error.message);return;}
+   if(!res.ok){toast(res.error?.message||'Не удалось встретить партию');return;}
    model.game=res.state;
    model.history.unshift({day:model.game.day,text:'Приехала первая партия: 130 человек.'});
    save();render(true);
@@ -1644,6 +1758,27 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-acti
   save();render();window.scrollTo(0,0);return;
  }
  if(d.action==='rename'){model.name=document.getElementById('nameInput').value.trim()||model.name;save();render();return}
+ if(d.action==='newsMenu'){
+   const news=(model.game.news||[]);
+   model.newsRead=news.length;save();
+   const box=document.getElementById('dialogueBox')||(()=>{const b=document.createElement('div');b.id='dialogueBox';b.className='dialogue-overlay';document.body.appendChild(b);return b;})();
+   box.innerHTML=`<div class="dialogue-panel"><div class="dialogue-main">
+    <div class="kicker">Городские новости</div>
+    <div class="dialogue-text news-list">${news.length?news.slice(0,40).map(n=>`<div class="news-item"><span class="news-day">День ${n.day}</span><p>${E(n.text)}</p></div>`).join(''):'<p>Пока новостей нет.</p>'}</div>
+    <div class="dialogue-choices">${button('Закрыть','closeNews','',true)}</div></div></div>`;
+   box.style.display='flex';
+   render(true);
+   return;
+ }
+ if(d.action==='closeNews'){const b=document.getElementById('dialogueBox');if(b)b.style.display='none';save();render(true);return;}
+ if(d.action==='resetMenu'){
+   if(confirm('Начать заново?\n\nВесь прогресс города будет удалён. Это действие нельзя отменить.')){
+     model={version:1,game:newGame(),name:'Новая Надежда',scene:0,started:false,history:[],dialogueFlags:[],completedConversations:[],personalRelations:{anatoly:50},questsDone:[],items:[],lastChoice:null};
+     save();const box=document.getElementById('dialogueBox');if(box)box.style.display='none';
+     render();window.scrollTo(0,0);
+   }
+   return;
+ }
  if(d.action==='reset'){if(confirm('Удалить прогресс этой версии и начать заново?')){model={version:1,game:newGame(),name:'Новая Надежда',scene:0,started:false,history:[],dialogueFlags:[],completedConversations:[],personalRelations:{anatoly:50}};save();render()}return}
  const actions={repairService:()=>({type:'repairService',service:d.id}),dialogue:()=>({type:'dialogue',characterId:d.id,choice:d.choice}),repair:()=>({type:'repair',houseId:d.house,entrance:Number(d.entrance),step:d.step}),settle:()=>({type:'settle',houseId:d.house,entrance:Number(d.entrance)}),infrastructure:()=>({type:'infrastructure',service:d.id}),newHouse:()=>({type:'buildHouse'}),wait:()=>({type:'wait',days:Number(d.days)}),help:()=>({type:'help',characterId:d.id,choice:d.choice}),event:()=>({type:'event',eventId:d.id,choice:d.choice})};
  if(actions[d.action])doAction(actions[d.action]());
