@@ -6,6 +6,7 @@ const SAVE_VERSION = 2;
 const SERVICES = Object.freeze(['power', 'water', 'heat', 'sewer', 'supply']);
 const PEOPLE = ['engineer', 'doctor', 'organizer'];
 const WEEK = 7 * 86400000;
+const START_MONEY = 260000;
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const FUELS = [.5, .3, .5, 1];
 const clone = value => structuredClone(value);
@@ -30,12 +31,16 @@ function makeHouseholds(houseId, entrance, residents) {
 function newGame(now = Date.now()) {
   timestamp(now);
   return {
-    version: SAVE_VERSION, startedAt: now, lastNow: now, day: 0, money: 200000,
+    version: SAVE_VERSION, startedAt: now, lastNow: now, day: 0, money: START_MONEY,
     population: 0, target: 10000, status: 'playing', firstArrivalClaimed: false,
     households: [], nextHouseId: 2, houses: [{id: 'h1', entrances: Array.from({length: 4}, entrance)}],
     infrastructure: Object.fromEntries(SERVICES.map(k => [k, {level: 0, capacity: 0, staff: 0, damaged: false}])),
     characters: Object.fromEntries(PEOPLE.map((k, i) => [k, {name: ['Илья Белов', 'Дарья Ким', 'Марина Белова'][i], relation: 50, health: 'healthy', dueDay: null, refused: false, dialogueDone: false}])),
     events: [], claimedMilestones: [], disruption: false, ledger: {income: 0, expenses: 0},
+    settlement: {invited: 0, arriving: [], upToDate: 0, readmitted: 0, applicants: [], nextApplicant: 1},
+    seed: now % 2147483647,
+    // Дневной цикл: день закрывается действиями, а не кнопкой.
+    dayState: {actionsLeft: 2, questsDone: [], talkedTo: [], adSkipUsed: false},
   };
 }
 /** Structural and cross-field validation, not authentication: local saves are user-editable. */
@@ -45,6 +50,9 @@ function validateSave(s) {
     timestamp(s.startedAt); timestamp(s.lastNow);
     requireRule(s.lastNow >= s.startedAt && integer(s.day, 0, 365) && integer(s.money) && integer(s.population, 0, 10000) && s.target === 10000 && ['playing', 'won', 'lost'].includes(s.status), 'INVALID_SAVE', 'Неверные основные поля сохранения.');
     requireRule(typeof s.firstArrivalClaimed === 'boolean' && typeof s.disruption === 'boolean' && integer(s.nextHouseId, 2, 81), 'INVALID_SAVE', 'Неверные флаги сохранения.');
+    requireRule(obj(s.settlement) && Array.isArray(s.settlement.applicants) && Array.isArray(s.settlement.arriving), 'INVALID_SAVE', 'Неверная очередь заселения.');
+    requireRule(obj(s.dayState) && integer(s.dayState.actionsLeft, 0, 2) && Array.isArray(s.dayState.questsDone) && Array.isArray(s.dayState.talkedTo), 'INVALID_SAVE', 'Неверное состояние дня.');
+    for (const a of s.settlement.applicants) requireRule(obj(a) && typeof a.id === 'string' && integer(a.size, 1, 6) && ['free', 'buy'].includes(a.kind), 'INVALID_SAVE', 'Неверная заявка на заселение.');
     requireRule(Array.isArray(s.houses) && s.houses.length >= 1 && s.houses.length <= 80 && s.nextHouseId === s.houses.length + 1, 'INVALID_SAVE', 'Неверный список домов.');
     let population = 0;
     s.houses.forEach((h, i) => {
@@ -54,7 +62,7 @@ function validateSave(s) {
         population += e.residents;
       }
     });
-    requireRule(population === s.population && s.firstArrivalClaimed === (population > 0), 'INVALID_SAVE', 'Население не соответствует домам.');
+    requireRule(population === s.population && (population === 0 || s.firstArrivalClaimed === true), 'INVALID_SAVE', 'Население не соответствует домам.');
     requireRule(Array.isArray(s.households) && s.households.length <= 10000, 'INVALID_SAVE', 'Неверный список семей.');
     const familyIds = new Set(), perEntrance = new Map();
     let familyPopulation = 0;
@@ -89,7 +97,7 @@ function validateSave(s) {
     requireRule(Array.isArray(s.claimedMilestones) && new Set(s.claimedMilestones).size === s.claimedMilestones.length && s.claimedMilestones.every(n => integer(n, 1, 9) && n * 1040 <= population), 'INVALID_SAVE', 'Неверные этапы восстановления.');
     for (let n = 1; n <= Math.floor(population / 1040); n++) requireRule(s.claimedMilestones.includes(n) && s.events.some(e => e.id === `restoration-${n}`), 'INVALID_SAVE', 'Отсутствует этап восстановления.');
     requireRule(s.events.filter(e => e.kind === 'restoration').length === s.claimedMilestones.length, 'INVALID_SAVE', 'Несогласованные награды.');
-    requireRule(obj(s.ledger) && integer(s.ledger.income) && integer(s.ledger.expenses) && s.money === 200000 + s.ledger.income - s.ledger.expenses, 'INVALID_SAVE', 'Неверный баланс.');
+    requireRule(obj(s.ledger) && integer(s.ledger.income) && integer(s.ledger.expenses) && s.money === START_MONEY + s.ledger.income - s.ledger.expenses, 'INVALID_SAVE', 'Неверный баланс.');
     requireRule((s.status === 'won') === (population === 10000) && (s.status !== 'playing' || s.day < 365), 'INVALID_SAVE', 'Неверный результат игры.');
     return {ok: true, error: null};
   } catch (e) { return {ok: false, error: {code: e.code || 'INVALID_SAVE', message: e.message}}; }
@@ -134,26 +142,220 @@ function relations(s, delta) { for (const p of Object.values(s.characters)) if (
 function addEvent(s, id, kind, title, effects) {
   if (!s.events.some(e => e.id === id)) { s.events.push({id, kind, title, day: s.day, resolved: false, choice: null}); effects.push(`Новое событие: ${title}`); }
 }
+/** Люди уезжают, если жить плохо: нет воды, дорого, отношения испорчены. */
+function departures(s, effects) {
+  if (s.population === 0) return;
+  const broken = SERVICES.filter(k => s.infrastructure[k].damaged).length;
+  const trust = Object.values(s.characters).filter(p => p.health !== 'dead').reduce((n, p) => n + p.relation, 0) / 3;
+  const risk = broken * 0.05 + Math.max(0, (45 - trust) / 400);
+  if (rng(s) > risk) return;
+  const left = Math.min(s.population, 1 + Math.floor(rng(s) * 4));
+  let remaining = left;
+  for (const h of s.houses) {
+    for (const e of h.entrances) {
+      if (remaining <= 0) break;
+      const out = Math.min(e.residents, remaining);
+      e.residents -= out; s.population -= out; remaining -= out;
+    }
+  }
+  s.households = s.households.slice(0, Math.max(0, s.households.length - left));
+  effects.push(`Город покинули ${left} человек.`);
+}
+
 function tick(s, days, now, effects) {
   for (let i = 0; i < days && s.status === 'playing'; i++) {
     s.day++;
     const expense = Math.ceil(SERVICES.reduce((total, k) => total + s.infrastructure[k].level * (120 + (k === 'heat' ? 30 * season(s, now).fuelMultiplier : 30)), 0)) + (s.disruption ? 100 : 0) + s.houses.reduce((sum, h) => sum + h.entrances.filter(e => e.stage === 3 && e.residents === 0).length * 10, 0);
-    earn(s, s.population * 4);
+    earn(s, s.population * 16);
     if (s.money < expense) { spend(s, s.money); s.status = 'lost'; effects.push('Банкротство: не удалось оплатить ежедневные расходы.'); }
     else spend(s, expense);
     for (const p of Object.values(s.characters)) if (p.dueDay !== null && s.day >= p.dueDay) {
       if (p.health === 'injured') { p.health = 'critical'; p.dueDay = s.day + 3; effects.push(`${p.name}: критическое состояние.`); }
       else { p.health = 'dead'; p.dueDay = null; effects.push(`${p.name}: погиб без помощи.`); relations(s, -10); }
     }
+    generateApplicants(s, effects);
+    // Если есть готовое пустое жильё и ждут заявки — люди начинают заселяться.
+    if (s.settlement.applicants.length && s.day % 2 === 0) {
+      for (const a of [...s.settlement.applicants]) {
+        if (s.status !== 'playing') break;
+        const slot = findFreeEntrance(s);
+        if (!slot) break;
+        const res = acceptApplicantInternal(s, a.id, effects);
+        if (!res) break;
+      }
+    }
+    departures(s, effects);
     if (s.day === 7) addEvent(s, 'threat', 'threat', 'Угроза мародёрства', effects);
     if (s.day === 30) addEvent(s, 'election', 'election', 'Выборы городского совета', effects);
     if (s.day >= 365) { s.status = 'lost'; effects.push('Год завершён: город не восстановлен.'); }
   }
 }
+/** Кто приходит сам: заявки появляются постепенно, от решений игрока, а не по кнопке. */
+/** Детерминированный генератор: одинаковый город = одинаковые заявки. */
+function rng(s) {
+  s.seed = (Math.imul(s.seed || 123456789, 1103515245) + 12345) >>> 0;
+  return (s.seed % 100000) / 100000;
+}
+
+function generateApplicants(s, effects) {
+  if (s.status !== 'playing') return;
+  if (freeCapacity(s) <= 0) return;
+  const trust = Object.values(s.characters).filter(p => p.health !== 'dead').reduce((n, p) => n + p.relation, 0) / 3;
+  const free = s.houses.reduce((n, h) => n + h.entrances.filter(e => e.stage === 3).reduce((m, e) => m + 130 - e.residents, 0), 0);
+  if (free === 0) return;
+  // Чем больше свободного жилья, тем больше желающих приходит за день.
+  const incoming = Math.max(3, Math.min(14, Math.ceil(free / 120)));
+  for (let i = 0; i < incoming; i++) {
+    if (s.settlement.applicants.length >= 12) break;
+    const chance = Math.min(0.97, 0.62 + free / 1500 + (trust - 50) / 500);
+    if (rng(s) > chance) continue;
+    pushApplicant(s, effects);
+  }
+}
+
+function pushApplicant(s, effects) {
+  const size = 1 + Math.floor(rng(s) * 4);
+  const payer = s.population > 120 ? 'buy' : 'free';
+  s.settlement.applicants.push({
+    id: 'ap' + (s.settlement.nextApplicant = (s.settlement.nextApplicant || 1) + 1),
+    size,
+    workers: Math.max(1, size - 1),
+    revenue: payer === 'buy' ? 1500 + size * 900 : 0,
+    kind: payer,
+    note: payer === 'buy' ? 'Готовы купить квартиру' : 'Приехали бы бесплатно, с работой помогут'
+  });
+  effects.push('Появились желающие заселиться. Посмотрите, кто просится в город.');
+}
+
+/** Свободная мощность: сколько ещё человек можно принять. */
+function freeCapacity(s) {
+  if (SERVICES.some(k => s.infrastructure[k].damaged)) return 0;
+  return Math.min(...SERVICES.map(k => s.infrastructure[k].capacity)) - s.population;
+}
+
+/** Сколько человек может приехать сейчас: запас мощности минус уже приехавшие. */
+function flightSlots(s) {
+  if (SERVICES.some(k => s.infrastructure[k].damaged)) return 0;
+  const capacity = Math.min(...SERVICES.map(k => s.infrastructure[k].capacity));
+  const pending = s.settlement.arriving.reduce((n, a) => n + (a.total - a.arrived), 0);
+  return Math.max(0, capacity - s.population - pending);
+}
+/** Переселение идёт только действиями игрока: кто-то приезжает, кто-то устраивается. */
+function advanceSettlement(s, effects) {
+  for (const a of s.settlement.arriving) {
+    if (a.arrived >= a.total) continue;
+    // Переезд: не больше одной партии в сутки на приглашение, но без простоя,
+    // если очередь желающих уже есть.
+    if (a.lastDay !== undefined && a.lastDay >= s.day) continue;
+    a.lastDay = s.day;
+    const house = s.houses.find(h => h.id === a.houseId);
+    const e = house && house.entrances[a.entrance];
+    if (!e || e.stage !== 3 || e.residents >= 130) continue;
+    const free = 130 - e.residents;
+    const room = Math.min(free, a.total - a.arrived, Math.max(0, s.target - s.population));
+    if (room <= 0) continue;
+    // Партия — до 40 человек: перевозка, распаковка, прописка.
+    const batch = Math.min(15, room);
+    e.residents += batch; a.arrived += batch; s.population += batch;
+    s.households.push(...makeHouseholds(house.id, a.entrance, batch)
+      .map((f, i) => ({...f, id: `${house.id}-e${a.entrance}-f${s.households.filter(x => x.houseId === house.id && x.entrance === a.entrance).length + i + 1}`})));
+    s.firstArrivalClaimed = true;
+    if (a.first) {
+      const grant = 20000;
+      earn(s, grant); a.first = false;
+      effects.push(`Первые ${batch} человек приехали и заселились. Муниципальная субсидия ${grant}.`);
+    } else {
+      earn(s, 12000); s.settlement.readmitted++;
+      effects.push(`Заселились ещё ${batch} человек.`);
+    }
+  }
+  s.settlement.arriving = s.settlement.arriving.filter(a => a.arrived < a.total);
+  s.settlement.upToDate++;
+  if (s.population > 0) {
+    for (let n = 1; n <= Math.floor(s.population / 1040); n++) if (!s.claimedMilestones.includes(n)) {
+      s.claimedMilestones.push(n); addEvent(s, `restoration-${n}`, 'restoration', `Восстановлен квартал ${n}`, effects);
+    }
+  }
+  if (s.population === s.target && s.status === 'playing') { s.status = 'won'; effects.push('Победа: 10 000 жителей вернулись домой!'); }
+}
+
+/** Одна семья с уникальным идентификатором в конкретном подъезде. */
+function makeFamily(s, houseId, entrance, size, workers) {
+  // Одна заявка может быть родственной группой: делим на семьи до 5 человек.
+  const out = [];
+  let left = size;
+  // Свободные номера семей в этом подъезде, без повторов.
+  const used = new Set(s.households.filter(x => x.houseId === houseId && x.entrance === entrance)
+    .map(x => Number(String(x.id).split('-f')[1])).filter(Number.isFinite));
+  let counter = used.size ? Math.max(...used) : 0;
+  while (left > 0) {
+    const part = Math.min(5, left);
+    left -= part;
+    counter += 1;
+    const n = counter;
+    const w = Math.min(Math.max(1, Math.min(workers || 1, 2)), Math.max(1, part - 1));
+    out.push({id: `${houseId}-e${entrance}-f${n}`, houseId, entrance, size: part, workers: w, children: part - w});
+  }
+  return out;
+}
+
+function acceptApplicantInternal(s, applicantId, effects) {
+  const a = s.settlement.applicants.find(x => x.id === applicantId);
+  requireRule(a, 'INVALID_ACTION', 'Заявка не найдена.');
+  if (freeCapacity(s) < a.size) return false;
+  const target = findFreeEntrance(s);
+  if (!target) return false;
+  s.settlement.applicants = s.settlement.applicants.filter(x => x.id !== a.id);
+  const e = s.houses.find(h => h.id === target.houseId).entrances[target.entrance];
+  const room = Math.min(a.size, 130 - e.residents, s.target - s.population);
+  if (room <= 0) return false;
+  e.residents += room; s.population += room;
+  s.households.push(...makeFamily(s, target.houseId, target.entrance, room, a.workers));
+  s.firstArrivalClaimed = true;
+  if (a.kind === 'buy') earn(s, a.revenue);
+  for (let n = 1; n <= Math.floor(s.population / 1040); n++) if (!s.claimedMilestones.includes(n)) {
+    s.claimedMilestones.push(n); addEvent(s, `restoration-${n}`, 'restoration', `Восстановлен квартал ${n}`, effects);
+  }
+  if (s.population === s.target && s.status === 'playing') { s.status = 'won'; effects.push('Победа: 10 000 жителей вернулись домой!'); }
+  effects.push(a.kind === 'buy'
+    ? `Семья из ${room} человек купила квартиру: +${a.revenue}.`
+    : `Семья из ${room} человек заселилась.`);
+  return true;
+}
+
+function findFreeEntrance(s) {
+  for (const h of s.houses) {
+    for (let i = 0; i < h.entrances.length; i++) {
+      const e = h.entrances[i];
+      if (e.stage === 3 && e.residents < 130) return {houseId: h.id, entrance: i};
+    }
+  }
+  return null;
+}
+
+/** Дыхание дня: часть действий затрачивает «время» и приближает смену суток. */
+const DAY_COST = {
+  repair: 1, infrastructure: 1, buildHouse: 1, acceptApplicant: 1,
+  dialogue: 1, help: 0, declineApplicant: 1, quest: 1
+};
+
+function spendAction(s, type, effects) {
+  if (!DAY_COST[type]) return;
+  s.dayState.actionsLeft -= DAY_COST[type];
+  if (s.dayState.actionsLeft > 0) return;
+  // День кончился: идёт ночь, приходят люди, уходят люди, начисляются деньги.
+  tick(s, 1, s.lastNow, effects);
+  s.dayState.actionsLeft = 2;
+  s.dayState.questsDone = s.dayState.questsDone.filter(q => q.day === s.day);
+  s.dayState.adSkipUsed = false;
+  effects.push('Наступил новый день.');
+}
+
 const FIELDS = {
   buildHouse: ['type'], infrastructure: ['type', 'service'], repair: ['type', 'houseId', 'entrance', 'step'],
-  settle: ['type', 'houseId', 'entrance'], wait: ['type', 'days'], help: ['type', 'characterId', 'choice'], event: ['type', 'eventId', 'choice'],
+  settle: ['type', 'houseId', 'entrance'], wait: ['type', 'days', 'viaAd', 'rewardIds'], help: ['type', 'characterId', 'choice'], event: ['type', 'eventId', 'choice'],
   repairService: ['type', 'service'], dialogue: ['type', 'characterId', 'choice'],
+  acceptApplicant: ['type', 'applicantId'], declineApplicant: ['type', 'applicantId'],
 };
 function act(state, action, now = Date.now()) {
   try {
@@ -184,18 +386,21 @@ function act(state, action, now = Date.now()) {
         requireRule(stage >= 0 && e.stage === stage, 'INVALID_STAGE', 'Нарушен порядок ремонта или этап уже завершён.');
         spend(s, [1500, 8000, 1500][stage]); e.stage++; effects.push('Этап ремонта завершён.');
       } else {
-        requireRule(e.stage === 3 && e.residents === 0, 'INVALID_STAGE', 'Нужен готовый незаселённый подъезд.');
-        const count = Math.min(130, s.target - s.population);
-        requireRule(SERVICES.every(k => !s.infrastructure[k].damaged && s.infrastructure[k].capacity >= s.population + count), 'CAPACITY', 'Недостаточная мощность инфраструктуры.');
-        e.residents = count; s.population += count;
-        s.households.push(...makeHouseholds(house.id, action.entrance, count));
-        const grant = s.firstArrivalClaimed ? 12000 : 20000;
-        earn(s, grant); s.firstArrivalClaimed = true;
-        effects.push(`Заселено ${count} жителей; одноразовая муниципальная субсидия ${grant}.`);
-        for (let n = 1; n <= Math.floor(s.population / 1040); n++) if (!s.claimedMilestones.includes(n)) {
-          s.claimedMilestones.push(n); addEvent(s, `restoration-${n}`, 'restoration', `Восстановлен квартал ${n}`, effects);
-        }
-        if (s.population === s.target) { s.status = 'won'; effects.push('Победа: 10 000 жителей вернулись домой!'); }
+        // settle = приглашение. Люди не появляются мгновенно: они переезжают
+        // и заселяются по мере действий игрока.
+        requireRule(e.stage === 3, 'INVALID_STAGE', 'Сначала подготовьте подъезд.');
+        // Уже заселено — считаем приглашение исполненным, без ошибки.
+        if (e.residents > 0) { effects.push('В этом подъезде уже живут люди, приглашение не требуется.'); }
+        requireRule(!s.settlement.arriving.some(a => a.houseId === house.id && a.entrance === action.entrance), 'ALREADY_RESOLVED', 'В этот подъезд уже приглашены люди.');
+        const isFirst = !s.firstArrivalClaimed;
+      if (isFirst) s.settlement.invited = (s.settlement.invited || 0);
+        const batch = isFirst ? 130 : 60;
+        const slots = flightSlots(s);
+        requireRule(slots >= batch, 'CAPACITY', `Нужна свободная мощность инфраструктуры хотя бы на ${batch} человек.`);
+        s.settlement.arriving.push({houseId: house.id, entrance: action.entrance, total: batch, arrived: 0, first: isFirst, day: s.day});
+        effects.push(isFirst
+          ? 'Приглашение передано. Первые 130 человек поедут к вам, начнут устраиваться и заселятся постепенно.'
+          : 'Приглашение отправлено: по мере дел и жилья люди приезжают партиями.');
       }
     } else if (action.type === 'repairService') {
       requireRule(SERVICES.includes(action.service), 'INVALID_ACTION', 'Неизвестная инфраструктура.');
@@ -204,6 +409,12 @@ function act(state, action, now = Date.now()) {
       spend(s, 3000); v.damaged = false;
       s.disruption = SERVICES.some(k => s.infrastructure[k].damaged);
       effects.push('Авария устранена, заселение снова доступно.');
+    } else if (action.type === 'declineApplicant') {
+      const a = s.settlement.applicants.find(x => x.id === action.applicantId);
+      requireRule(a, 'INVALID_ACTION', 'Заявка не найдена.');
+      s.settlement.applicants = s.settlement.applicants.filter(x => x.id !== a.id);
+      relations(s, -1);
+      effects.push('Вы отказали семье. Слух о городе стал хуже.');
     } else if (action.type === 'dialogue') {
       requireRule(PEOPLE.includes(action.characterId) && ['listen', 'dismiss'].includes(action.choice), 'INVALID_ACTION', 'Неверный диалог.');
       const p = s.characters[action.characterId];
@@ -213,9 +424,23 @@ function act(state, action, now = Date.now()) {
       p.relation = Math.max(0, Math.min(100, p.relation + (action.choice === 'listen' ? 5 : -10)));
       tick(s, 1, now, effects);
       effects.push(action.choice === 'listen' ? 'Вы выслушали персонажа: отношения улучшились.' : 'Резкий отказ ухудшил отношения.');
+    } else if (action.type === 'acceptApplicant') {
+      acceptApplicantInternal(s, action.applicantId, effects);
     } else if (action.type === 'wait') {
-      requireRule(integer(action.days, 1, 30), 'INVALID_ACTION', 'Ожидание: от 1 до 30 игровых суток.');
-      tick(s, action.days, now, effects);
+      if (action.viaAd === true) {
+        requireRule(Array.isArray(action.rewardIds) && action.rewardIds.length > 0, 'AD_UNVERIFIED', 'Пропуск дня награждается только после подтверждения рекламы.');
+        requireRule(!s.dayState.adSkipUsed, 'ALREADY_RESOLVED', 'Сегодня уже пропускали день за рекламу.');
+        s.dayState.adSkipUsed = true;
+        tick(s, 1, now, effects);
+        if (s.status === 'playing') advanceSettlement(s, effects);
+        s.dayState.adSkipUsed = false; // новый день — новый пропуск
+        s.dayState.actionsLeft = 2;
+        effects.push('День прожит за рекламу. Действия не тратились.');
+      } else {
+        requireRule(integer(action.days, 1, 30), 'INVALID_ACTION', 'Ожидание: от 1 до 30 игровых суток.');
+        effects.push('Простой день не даёт бесплатного прогресса; используйте действия или рекламу.');
+        tick(s, 0, now, effects);
+      }
     } else if (action.type === 'help') {
       requireRule(PEOPLE.includes(action.characterId) && ['free', 'medical', 'refuse'].includes(action.choice), 'INVALID_ACTION', 'Неверный выбор помощи.');
       const p = s.characters[action.characterId];
@@ -247,6 +472,12 @@ function act(state, action, now = Date.now()) {
       } else earn(s, 20000);
       effects.push(`Событие завершено: ${e.title}.`);
     }
+    // Люди устраиваются не сразу: переезд идёт после действий и в дни ожидания.
+    if (['repair', 'infrastructure', 'buildHouse', 'acceptApplicant'].includes(action.type) && s.status === 'playing') {
+      advanceSettlement(s, effects);
+      generateApplicants(s, effects);
+    }
+    if (s.status === 'playing' && !['wait', 'adReward'].includes(action.type)) spendAction(s, action.type, effects);
     const check = validateSave(s);
     requireRule(check.ok, 'INTERNAL_ERROR', check.error?.message);
     return {ok: true, state: s, effects, error: null};
@@ -789,6 +1020,83 @@ function profileSummary() {
   }));
 }
 
+// Реклама за вознаграждение.
+// Единый адаптер: сейчас сеть ещё не подключена, но весь интерфейс
+// уже работает через этот модуль. Когда придёт ссылка на сеть —
+// меняется только createProvider, остальной код не трогается.
+
+const AD_CONFIG = {
+  // UnitID от пользователя. Пока сеть не подключена — используется для разметки.
+  rewardedUnitId: '60918',
+  enabled: false,
+  // Награды, за которые выдаётся просмотр.
+  rewards: {
+    skipDay: 'Пропустить день без действий',
+    skipQuest: 'Завершить квест без выполнения',
+    rewindChoice: 'Отменить один плохой выбор',
+    money: 'Разовая выплата $3 000'
+  },
+  // Защита от накрутки: не больше N наград за день, по одному типу.
+  limits: { perDay: 3, moneyPerDay: 1 }
+};
+
+const used = { day: null, count: 0, types: new Set() };
+
+function resetIfNewDay(day) {
+  if (used.day !== day) {
+    used.day = day;
+    used.count = 0;
+    used.types.clear();
+  }
+}
+
+/**
+ * Провайдер рекламы. Возвращает Promise<{ok, rewardIds}|{ok:false, reason}>.
+ * Внимание: подтверждение должно приходить ОТ СЕТИ, а не от интерфейса.
+ * Сейчас провайдер-заглушка и всегда отвечает отказом — это честно:
+ * награду нельзя получить, пока реклама реально не подключена.
+ */
+function createProvider() {
+  return {
+    async showRewarded(reward, day) {
+      resetIfNewDay(day);
+      if (!AD_CONFIG.enabled) {
+        return { ok: false, reason: 'Реклама ещё не подключена. Награда не выдаётся.' };
+      }
+      if (used.count >= AD_CONFIG.limits.perDay) {
+        return { ok: false, reason: 'На сегодня лимит рекламных наград исчерпан.' };
+      }
+      if (used.types.has(reward)) {
+        return { ok: false, reason: 'За это вознаграждение сегодня уже смотрели.' };
+      }
+      // Здесь будет реальный вызов сети (SDK). Пока не подключено — отказ.
+      return { ok: false, reason: 'Провайдер рекламы не настроен.' };
+    },
+    markIssued(reward) {
+      used.count += 1;
+      used.types.add(reward);
+    }
+  };
+}
+
+const provider = createProvider();
+
+async function watchAd(reward, day) {
+  const result = await provider.showRewarded(reward, day);
+  if (result.ok) provider.markIssued(reward);
+  return result;
+}
+
+function adStatus(day) {
+  resetIfNewDay(day);
+  return {
+    enabled: AD_CONFIG.enabled,
+    usedToday: used.count,
+    limit: AD_CONFIG.limits.perDay,
+    unitId: AD_CONFIG.rewardedUnitId
+  };
+}
+
 const ASSET_BASE='https://raw.githubusercontent.com/korinecdanila-sys/City-game/main/';
 const file=name=>ASSET_BASE+encodeURIComponent(name+'.jpeg');
 /** Portraits provided by the user in City-game repository. */
@@ -829,6 +1137,7 @@ function writeSave(storage,data){try{storage.setItem(STORAGE_KEY,JSON.stringify(
 
 
 
+
 const app=document.getElementById('app');
 let storage;try{storage=window.localStorage;}catch{storage={getItem(){throw Error()},setItem(){throw Error()}}}
 const restored=readSave(storage,validateSave,migrateSave);
@@ -857,7 +1166,7 @@ function intro(){
  const naming=scene.id==='night_talk'?`<section class="card"><label for="storyNameInput">Как вы назовёте город?</label><p><small>Вы познакомились с Анатолием. До утреннего осмотра предложите своё имя города — его можно будет изменить позднее.</small></p><input id="storyNameInput" maxlength="30" value="${E(model.name)}"></section>`:'';
  app.innerHTML=`<main>${art()}<article class="card story-card"><div class="kicker">Глава 1 · ${E(scene.speaker||'Начало')}</div>${speakerPortrait(scene.speaker)}<h1>${E(scene.title)}</h1><p>${E(speak(scene.speaker,text))}</p>${naming}<div class="dialogue">${(scene.choices||[]).map((c,i)=>`<section class="card">${button(E(c.label),'story',`data-option="${i}"`,i===0)}${c.severe?'<p><small>Этот выбор может повлечь серьёзные последствия — и хорошие, и плохие.</small></p>':''}</section>`).join('')}</div><small>Выборы пролога сохраняют сюжетные отметки и запись в журнале. Стартовые $200 000 уже включены в начальный бюджет и не начисляются повторно. Сюжетные планы сами по себе не выполняют строительные работы и не меняют отношения персонажей. Локальная одиночная версия; сезоны меняются каждые семь реальных суток.</small></article></main>`;
 }
-function overview(){const s=model.game;const ready=s.houses.flatMap(h=>h.entrances).filter(e=>e.stage===3).length;return `<section class="card adviser">${portrait()}<div class="kicker">Анатолий · следующий шаг</div><h2>${s.population?'У города появились люди':'Начнём с одного подъезда'}</h2><p>${s.population?'Следите за резервом мощности, расходами и здоровьем людей. Не нужно подключать пустые дома без плана.':'Расчистите подъезд, восстановите его и подключите пять основных систем. Затем пригласите первую группу из общежития.'}</p><div class="clear"></div>${button('Открыть план работ →','tab','data-id="build"',true)}</section>${art()}<section class="card"><h3>Ваш город</h3><p>Домов: ${s.houses.length}. Готовых подъездов: ${ready}. Население: ${s.population}.</p><p>Цель: ${s.target} жителей до конца 365-го дня.</p><small>Доход за всё время: ${currency(s.ledger.income)} · расходы: ${currency(s.ledger.expenses)}. Содержание идёт при игровых действиях, не во время отсутствия.</small></section>${button('Прожить один день','wait','data-days="1"')}`;}
+function overview(){const s=model.game;const ready=s.houses.flatMap(h=>h.entrances).filter(e=>e.stage===3).length;return `<section class="card adviser">${portrait()}<div class="kicker">Анатолий · следующий шаг</div><h2>${s.population?'У города появились люди':'Начнём с одного подъезда'}</h2><p>${s.population?'Следите за резервом мощности, расходами и здоровьем людей. Не нужно подключать пустые дома без плана.':'Расчистите подъезд, восстановите его и подключите пять основных систем. Затем пригласите первую группу из общежития.'}</p><div class="clear"></div>${button('Открыть план работ →','tab','data-id="build"',true)}</section>${art()}<section class="card"><h3>Ваш город</h3><p>Домов: ${s.houses.length}. Готовых подъездов: ${ready}. Население: ${s.population}.</p><p>Цель: ${s.target} жителей до конца 365-го дня.</p><small>Доход за всё время: ${currency(s.ledger.income)} · расходы: ${currency(s.ledger.expenses)}. Содержание идёт при игровых действиях, не во время отсутствия.</small></section>${s.dayState.actionsLeft > 0 ? button(`Действий сегодня: ${s.dayState.actionsLeft}`, 'noop', 'disabled') : button('Пропустить день за рекламу', 'adSkip')}`;}
 function construction(){const s=model.game;return `<section class="card adviser"><h2>План восстановления</h2><p>Работайте по порядку: расчистка → ремонт → подключение. Пустые подключённые мощности тоже требуют содержания. Кнопка выполняет указанную работу.</p></section>${s.houses.map(h=>`<section class="card"><h3>Дом ${E(h.id)}</h3>${h.entrances.map((e,i)=>{const labels=['Расчистить · $1 500','Отремонтировать · $8 000','Подключить · $1 500'];return `<div class="card"><strong>Подъезд ${i+1}</strong><p>${['Аварийный','Расчищен','Отремонтирован','Готов к заселению'][e.stage]} · жителей: ${e.residents}/130</p>${e.stage<3?button(labels[e.stage],'repair',`data-house="${h.id}" data-entrance="${i}" data-step="${['clear','repair','connect'][e.stage]}"`,true):e.residents?'<span class="badge">Заселён</span>':button(s.firstArrivalClaimed?'Пригласить жителей':'Пригласить 130 жителей общежития','settle',`data-house="${h.id}" data-entrance="${i}"`,true)}</div>`}).join('')}</section>`).join('')}<section class="card"><h3>Следующий дом</h3><p>Можно начать заранее, но сначала оцените свободное жильё и резерв инфраструктуры.</p>${button('Начать следующий дом · $12 000','newHouse')}</section><h2>Инфраструктура</h2>${Object.entries(s.infrastructure).map(([id,x])=>`<section class="card"><h3>${serviceNames[id]}</h3><p>Уровень ${x.level} · мощность ${x.capacity} жителей · штат ${x.staff}.</p>${x.damaged?'<p class="danger">Авария: новое заселение остановлено.</p>'+button('Восстановить систему · $3 000','repairService',`data-id="${id}"`,true):button('Увеличить мощность · $20 000','infrastructure',`data-id="${id}"`)}</section>`).join('')}`;}
 function people(){const s=model.game;return `${conversationView()}${conversationList()}<section class="card"><h2>Семьи города</h2><p>Домохозяйств: ${s.households.length}. Взрослых работников: ${s.households.reduce((n,h)=>n+h.workers,0)}. Детей: ${s.households.reduce((n,h)=>n+h.children,0)}.</p><small>Каждая семья имеет адрес и занимает место в конкретном подъезде. Численность проверяется при каждом действии.</small></section><section class="card"><h2>Жители и специалисты</h2><p>При травме отсчёт идёт в игровых днях. До ожидания или строительства сначала проверьте, кому нужна помощь.</p></section>${Object.entries(s.characters).map(([id,c])=>`<section class="card ${['injured','critical'].includes(c.health)?'danger':''}">${portrait(c.name)}<h3>${E(c.name)}</h3><p>Отношение: ${c.relation}/100 · состояние: ${E({healthy:'здоров',injured:'травмирован',critical:'критическое',dead:'погиб'}[c.health]||c.health)}${c.dueDay!==null?' · следующий срок: день '+c.dueDay:''}</p>${c.health==='healthy'&&!c.dialogueDone?'<blockquote>«До начала работ хочу обсудить условия и безопасность. Вы готовы меня выслушать?»</blockquote>'+button('Выслушать · отношения +5 · 1 день','dialogue',`data-id="${id}" data-choice="listen"`,true)+button('Отмахнуться · отношения −10 · 1 день','dialogue',`data-id="${id}" data-choice="dismiss"`):''}${['injured','critical'].includes(c.health)?['free','medical','refuse'].map((choice,i)=>button(['Организовать бесплатную помощь · 1 день','Медицинская помощь · $2 000','Отказаться от помощи'][i],'help',`data-id="${id}" data-choice="${choice}"`,i===0)).join('<br>'):''}</section>`).join('')}<h2>Справочник персонажей истории</h2><p>Эти 16 биографий — сюжетный справочник. Не все персонажи активны в игровом движке; действующие состояния и помощь показаны в карточках выше.</p>${CHARACTERS.map(c=>`<section class="card">${portrait(c.name)}<h3>${E(c.name)}</h3><small>${E(c.role)}</small><p>${E(c.background)}</p>${BIRTHDAYS[c.name]?`<p><small>День рождения: ${E(birthdayLabel(c.name))}. ${E(BIRTHDAYS[c.name].note)}</small></p>`:''}</section>`).join('')}`;}
 function events(){return model.game.events.filter(e=>!e.resolved).map(e=>{const choices=e.kind==='threat'?[['secure','Организовать охрану · 1 день'],['pay','Оплатить меры защиты · $5 000'],['ignore','Игнорировать: авария сети, травма Ильи, отношения −10; содержание +$100/день до ремонта']]:e.kind==='election'?[['community','Общественная программа · отношения +5'],['austerity','Жёсткая экономия · отношения −15']]:[['claim','Получить помощь']];return `<section class="card danger"><div class="kicker">Событие</div><h2>${E(e.title)}</h2>${choices.map(([value,label])=>button(label,'event',`data-id="${e.id}" data-choice="${value}"`)).join('<br>')}</section>`}).join('');}
@@ -865,6 +1174,19 @@ function settings(){return `<section class="card"><h2>Название горо�
 function render(){if(!model.started){intro();return}const s=model.game,se=season(s);app.innerHTML=`<header><div class="brand"><strong>${E(model.name)}</strong><small>День ${s.day}/365 · ${E({spring:'Весна',summer:'Лето',autumn:'Осень',winter:'Зима'}[se.name]||se.name)}</small></div><div class="stats"><div class="stat">${currency(s.money)}<small>БЮДЖЕТ</small></div><div class="stat">${s.population}<small>ЖИТЕЛИ</small></div><div class="stat">${s.houses.length}<small>ДОМА</small></div></div></header><main>${warning?`<section class="card danger">${E(warning)}</section>`:''}${s.status!=='playing'?`<section class="card"><h1>${s.status==='won'?'Пари выиграно':'Пари завершилось'}</h1><p>${s.status==='won'?'Город получил новую жизнь. Северин приглашает вас в закрытый клуб мэров.':'Посмотрите журнал и попробуйте другую стратегию.'}</p></section>`:''}${events()}${tab==='city'?overview():tab==='build'?construction():tab==='people'?people():settings()}</main><nav>${[['city','⌂','Город'],['build','⚒','Работы'],['people','♙','Люди'],['settings','☷','Журнал']].map(([id,icon,label])=>`<button class="${tab===id?'active':''}" data-action="tab" data-id="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;}
 document.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b||b.disabled)return;const d=b.dataset;
  if(d.action==='tab'){tab=d.id;render();window.scrollTo(0,0);return}
+ if(d.action==='adSkip'){
+   const ad=adStatus(model.game.day);
+   if(!ad.enabled){
+     alert('Реклама ещё не подключена.\n\nUnit ID сохранён: '+AD_CONFIG.rewardedUnitId+'\nКогда сеть будет подключена, эта кнопка начнёт выдавать пропуск дня.');
+     return;
+   }
+   watchAd('skipDay', model.game.day).then(res=>{
+     if(!res.ok){toast(res.reason);return;}
+     doAction({type:'wait',days:1,viaAd:true,rewardIds:['skipDay:'+Date.now()]});
+   });
+   return;
+ }
+ if(d.action==='noop')return;
  if(d.action==='conversation'){const c=startConversation(d.id);if(!c||model.completedConversations.includes('conversation:'+d.id+':complete')||model.game.characters[c.characterId]?.health==='dead')return;model.conversation=c;save();render();window.scrollTo(0,0);return;}
  if(d.action==='closeConversation'){model.conversation=null;save();render();return;}
  if(d.action==='reply'){if(!model.conversation)return;const r=chooseReply(model.conversation,d.id);if(!r.ok){toast('Этот ответ недоступен.');return;}model.conversation=r.session;const fx=r.effects;if(fx.id&&!model.completedConversations.includes(fx.id)){for(const [id,delta]of Object.entries(fx.relation)){const p=model.game.characters[id];if(p)p.relation=Math.max(0,Math.min(100,p.relation+delta));else model.personalRelations[id]=Math.max(0,Math.min(100,(model.personalRelations[id]??50)+delta));}model.completedConversations.push(fx.id);model.dialogueFlags=[...new Set([...model.dialogueFlags,...fx.flags])];model.history.unshift({day:model.game.day,text:'Завершён разговор: '+r.session.title});}save();render();return;}
